@@ -1,0 +1,46 @@
+# LX Terminology Editor
+
+Static frontend for creating and sharing LX-style terminology YAML bundles.
+
+## Structure
+
+- `src/models/`: terminology module definitions, config loading, normalization, validation
+- `src/utils/`: YAML serialization, URL sharing, downloads, local persistence
+- `src/store.js`: central state container with subscription and mutation helpers
+- `src/ui/`: DOM rendering and event wiring
+- `src/main.js`: browser entry point
+
+## Run
+
+Für die UI alleine reicht ein statischer Server. Für den eingebauten `ok`-Lint-Knopf
+verwende den lokalen Python-Server aus diesem Repo:
+
+```bash
+python3 server.py
+```
+
+Dann `http://localhost:4173` öffnen.
+
+## Current scope
+
+- Edits bundle metadata and six terminology modules:
+  - `lx_examinations`
+  - `lx_findings`
+  - `lx_interventions`
+  - `lx_classifications`
+  - `lx_classification_choices`
+  - `lx_descriptors`
+- Generates:
+  - root `config.yaml`
+  - per-module `config.yaml`
+  - per-module `data/custom.yaml`
+- Persists state in `localStorage`
+- Encodes shareable state in the URL hash
+- Downloads generated YAML files individually
+- Führt `ok`/`scripts/lint_kb_yaml.py` über einen lokalen API-Endpoint gegen das aktuelle Bundle aus
+
+## Notes
+
+Der Lint-Button schreibt das aktuelle Bundle temporär und ruft dann den
+Knowledge-Base-Linter in `lx-data-models` auf. Das ersetzt noch keine
+schema-basierte Validierung direkt im Browser.

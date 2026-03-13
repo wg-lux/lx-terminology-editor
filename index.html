@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LX Terminologie-Editor</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">LX Terminologie-Editor</p>
+          <h1>Terminologie. YAML.</h1>
+          <p class="hero-copy">
+            Dieser Editor orientiert sich an der dokumentierten Modulstruktur in
+            <code>lx-data-models/lx_dtypes/data/</code> und exportiert ein
+            teilbares Terminologie-Bundle mit Modulkonfigurationen und Datendateien.
+          </p>
+        </div>
+        <div class="hero-actions">
+          <button id="reset-button" class="ghost-button" type="button">Beispiel zurücksetzen</button>
+          <button id="share-button" class="primary-button" type="button">Freigabelink kopieren</button>
+          <button id="download-button" class="secondary-button" type="button">YAML-Dateien herunterladen</button>
+          <button data-action="lint" class="secondary-button" type="button">Mit ok prüfen</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Bundle</p>
+              <h2>Paket-Einstellungen</h2>
+            </div>
+            <p class="muted">Root-<code>config.yaml</code> plus ausgewählte Modulverzeichnisse.</p>
+          </div>
+
+          <div class="form-grid" id="bundle-form"></div>
+
+          <div class="module-pickers" id="module-pickers"></div>
+
+          <div class="panel-header panel-header-inline">
+            <div>
+              <p class="section-kicker">Editor</p>
+              <h2>Terminologie-Module</h2>
+            </div>
+            <div class="tab-strip" id="module-tabs"></div>
+          </div>
+
+          <div id="module-editor"></div>
+        </section>
+
+        <section class="panel panel-preview">
+          <div class="panel-header">
+            <div>
+              <p class="section-kicker">Vorschau</p>
+              <h2>Generierte Dateien</h2>
+            </div>
+            <p class="muted">Konfiguration und YAML-Inhalte aktualisieren sich beim Bearbeiten.</p>
+          </div>
+
+          <div class="preview-toolbar">
+            <div class="tab-strip" id="file-tabs"></div>
+          </div>
+
+          <pre class="preview-code"><code id="file-preview"></code></pre>
+
+          <div class="lint-panel">
+            <div class="panel-header panel-header-inline">
+              <div>
+                <p class="section-kicker">Lint</p>
+                <h2>Ausgabe in Ordnung?
+                </h2>
+                <button data-action="lint" class="secondary-button" type="button">Mit ok prüfen</button>
+
+              </div>
+              <p class="muted" id="lint-status">Noch nicht ausgeführt.</p>
+            </div>
+            <pre class="preview-code lint-code"><code id="lint-output">Noch keine Lint-Ausgabe.</code></pre>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="record-card-template">
+      <article class="record-card">
+        <div class="record-card-header">
+          <div>
+            <p class="record-kicker"></p>
+            <h3></h3>
+          </div>
+          <div class="record-actions">
+            <button class="ghost-button duplicate-record-button" type="button">Duplizieren</button>
+            <button class="ghost-button delete-record-button" type="button">Löschen</button>
+          </div>
+        </div>
+        <div class="record-fields"></div>
+      </article>
+    </template>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

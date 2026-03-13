@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lx-terminology-editor"
+version = "0.1.0"
+description = "Local server and tooling for the LX terminology editor frontend."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+  { name = "LX Terminology Editor" },
+]
+dependencies = []
+
+[project.scripts]
+lx-terminology-editor-server = "server:main"
+
+[tool.setuptools]
+py-modules = ["server"]
+
+[project]
+dependencies = [
+  "PyYAML>=6,<7",
+]
