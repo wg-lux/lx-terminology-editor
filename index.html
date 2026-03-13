@@ -22,6 +22,8 @@
           <button id="reset-button" class="ghost-button" type="button">Beispiel zurücksetzen</button>
           <button id="share-button" class="primary-button" type="button">Freigabelink kopieren</button>
           <button id="download-button" class="secondary-button" type="button">YAML-Dateien herunterladen</button>
+          <button id="zip-download-button" class="secondary-button" type="button">ZIP herunterladen</button>
+          <button id="zip-import-button" class="ghost-button" type="button">ZIP importieren</button>
           <button data-action="lint" class="secondary-button" type="button">Mit ok prüfen</button>
         </div>
       </header>
@@ -99,6 +101,8 @@
       </article>
     </template>
 
+    <input id="zip-import-input" type="file" accept=".zip,application/zip" hidden>
+    <script src="./node_modules/jszip/dist/jszip.min.js"></script>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>

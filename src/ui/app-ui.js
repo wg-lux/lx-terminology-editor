@@ -3,6 +3,7 @@ import { MODULE_MAP } from "../models/module-definitions.js";
 import { validateBundle } from "../models/validator.js";
 import { downloadTextEntries } from "../utils/download.js";
 import { runLint } from "../utils/lint-api.js";
+import { downloadBundleZip, importBundleZip } from "../utils/zip-bundle.js";
 import { buildShareUrl } from "../utils/url-hash.js";
 import { stringifyYaml } from "../utils/yaml-helper.js";
 
@@ -15,6 +16,9 @@ export function mountApp({ store }) {
   const filePreview = document.querySelector("#file-preview");
   const shareButton = document.querySelector("#share-button");
   const downloadButton = document.querySelector("#download-button");
+  const zipDownloadButton = document.querySelector("#zip-download-button");
+  const zipImportButton = document.querySelector("#zip-import-button");
+  const zipImportInput = document.querySelector("#zip-import-input");
   const lintButtons = document.querySelectorAll('[data-action="lint"]');
   const resetButton = document.querySelector("#reset-button");
   const cardTemplate = document.querySelector("#record-card-template");
@@ -48,6 +52,43 @@ export function mountApp({ store }) {
   downloadButton.addEventListener("click", () => {
     downloadTextEntries(buildSerializedFiles(store.getState()));
     showToast("YAML-Dateien heruntergeladen.");
+  });
+
+  zipDownloadButton.addEventListener("click", async () => {
+    try {
+      const state = store.getState();
+      const bundleName = (state.bundle.name || "terminology-bundle").trim() || "terminology-bundle";
+      await downloadBundleZip(buildSerializedFiles(state), `${bundleName}.zip`);
+      showToast("ZIP-Datei heruntergeladen.");
+    } catch (error) {
+      console.error(error);
+      showToast("ZIP-Download fehlgeschlagen.");
+    }
+  });
+
+  zipImportButton.addEventListener("click", () => {
+    zipImportInput.value = "";
+    zipImportInput.click();
+  });
+
+  zipImportInput.addEventListener("change", async (event) => {
+    const [file] = event.target.files || [];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const importedState = await importBundleZip(file);
+      store.replaceState(importedState);
+      const nextState = store.getState();
+      activeModuleKey = nextState.bundle.modules[0] || "lx_examinations";
+      activePreviewGroupKey = "root";
+      activeFilePath = "config.yaml";
+      showToast("ZIP-Bundle importiert.");
+    } catch (error) {
+      console.error(error);
+      showToast(error.message || "ZIP-Import fehlgeschlagen.");
+    }
   });
 
   lintButtons.forEach((lintButton) => {

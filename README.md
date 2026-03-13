@@ -33,10 +33,11 @@ Dann `http://localhost:4173` öffnen.
 - Generates:
   - root `config.yaml`
   - per-module `config.yaml`
-  - per-module `data/custom.yaml`
+  - per-module `data/*.yaml`
 - Persists state in `localStorage`
 - Encodes shareable state in the URL hash
 - Downloads generated YAML files individually
+- Exports and imports complete terminology bundles as `.zip`
 - Führt `ok`/`scripts/lint_kb_yaml.py` über einen lokalen API-Endpoint gegen das aktuelle Bundle aus
 
 ## Notes
