@@ -12,15 +12,12 @@ license = { text = "MIT" }
 authors = [
   { name = "LX Terminology Editor" },
 ]
-dependencies = []
+dependencies = [
+  "PyYAML>=6,<7",
+]
 
 [project.scripts]
 lx-terminology-editor-server = "server:main"
 
 [tool.setuptools]
 py-modules = ["server"]
-
-[project]
-dependencies = [
-  "PyYAML>=6,<7",
-]

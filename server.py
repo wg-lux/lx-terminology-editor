@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent
 LX_DATA_MODELS_ROOT = ROOT / "lx-data-models"
 KB_LINT_MODULE_PATH = LX_DATA_MODELS_ROOT / "lx_kb_lint.py"
 PORT = 4173
+RECORD_PASSTHROUGH_KEY = "_passthrough"
 
 
 def normalize_state(candidate: dict) -> dict:
@@ -120,7 +121,8 @@ def build_file_map(state: dict) -> dict[str, str]:
         "lx_interventions": {"model": "intervention", "depends_on": []},
         "lx_classifications": {"model": "classification", "depends_on": ["lx_classification_choices"]},
         "lx_classification_choices": {"model": "classification_choice", "depends_on": ["lx_descriptors"]},
-        "lx_descriptors": {"model": "classification_choice_descriptor", "depends_on": []},
+        "lx_units": {"model": "unit", "depends_on": []},
+        "lx_descriptors": {"model": "classification_choice_descriptor", "depends_on": ["lx_units"]},
     }
 
     for module_key in bundle["modules"]:
@@ -140,7 +142,19 @@ def build_file_map(state: dict) -> dict[str, str]:
         for document in documents:
             file_map[f"{module_key}/data/{document['name']}"] = to_yaml(
                 [
-                    prune_empty({"model": defaults["model"], **record, "_documentId": None})
+                    prune_empty(
+                        {
+                            "model": defaults["model"],
+                            **record,
+                            **(
+                                record.get(RECORD_PASSTHROUGH_KEY)
+                                if isinstance(record.get(RECORD_PASSTHROUGH_KEY), dict)
+                                else {}
+                            ),
+                            "_documentId": None,
+                            RECORD_PASSTHROUGH_KEY: None,
+                        }
+                    )
                     for record in state["records"].get(module_key, [])
                     if record.get("_documentId") in (None, document["id"])
                 ]

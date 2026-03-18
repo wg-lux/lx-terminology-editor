@@ -1,5 +1,5 @@
 import { MODULE_MAP } from "./module-definitions.js";
-import { pruneEmpty } from "./validator.js";
+import { RECORD_PASSTHROUGH_KEY, pruneEmpty } from "./validator.js";
 
 export function buildRootConfig(bundle) {
   return pruneEmpty({
@@ -37,13 +37,20 @@ export function buildFileObjects(state) {
     documents.forEach((document) => {
       fileObjects[`${moduleKey}/data/${document.name}`] = state.records[moduleKey]
         .filter((record) => record._documentId === document.id)
-        .map((record) =>
-          pruneEmpty({
+        .map((record) => {
+          const passthrough =
+            record[RECORD_PASSTHROUGH_KEY] && typeof record[RECORD_PASSTHROUGH_KEY] === "object"
+              ? record[RECORD_PASSTHROUGH_KEY]
+              : {};
+
+          return pruneEmpty({
             model: moduleDefinition.model,
             ...record,
+            ...passthrough,
             _documentId: undefined,
-          }),
-        );
+            [RECORD_PASSTHROUGH_KEY]: undefined,
+          });
+        });
     });
   });
 

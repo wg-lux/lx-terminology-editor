@@ -87,6 +87,27 @@ export function createDefaultState() {
     },
   ];
 
+  state.records.lx_units = [
+    {
+      _documentId: state.documents.lx_units[0].id,
+      name: "minutes",
+      abbreviation: "min",
+      name_de: "Minuten",
+      name_en: "Minutes",
+      description: "Time unit for durations and numeric time values.",
+      unit_types: ["time"],
+    },
+    {
+      _documentId: state.documents.lx_units[0].id,
+      name: "millimeter",
+      abbreviation: "mm",
+      name_de: "Millimeter",
+      name_en: "Millimeter",
+      description: "Length unit for sizes such as lesion diameter.",
+      unit_types: ["length"],
+    },
+  ];
+
   state.records.lx_descriptors = [
     {
       _documentId: state.documents.lx_descriptors[0].id,

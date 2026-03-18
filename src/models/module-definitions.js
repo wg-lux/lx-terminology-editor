@@ -105,11 +105,31 @@ export const MODULE_DEFINITIONS = [
     ],
   },
   {
+    key: "lx_units",
+    label: "Einheiten",
+    model: "unit",
+    description: "Wiederverwendbare Einheiten für numerische Angaben wie Laborwerte, Grössen oder Zeitdauern.",
+    dependsOn: [],
+    fields: [
+      { key: "name", label: "Name", type: "text", placeholder: "millimeter", required: true },
+      { key: "abbreviation", label: "Abkuerzung", type: "text", placeholder: "mm" },
+      { key: "name_de", label: "Deutsche Bezeichnung", type: "text", placeholder: "Millimeter" },
+      { key: "name_en", label: "Englische Bezeichnung", type: "text", placeholder: "Millimeter" },
+      {
+        key: "description",
+        label: "Beschreibung",
+        type: "textarea",
+        placeholder: "Einheit fuer Groessen- oder Laborangaben.",
+      },
+      { key: "unit_types", label: "Einheitstypen", type: "tags", placeholder: "length" },
+    ],
+  },
+  {
     key: "lx_descriptors",
     label: "Deskriptoren",
     model: "classification_choice_descriptor",
     description: "Zusätzliche Deskriptordefinitionen wie numerische Einheiten oder Textwerte.",
-    dependsOn: [],
+    dependsOn: ["lx_units"],
     fields: [
       { key: "name", label: "Name", type: "text", placeholder: "minutes_numeric_value", required: true },
       {

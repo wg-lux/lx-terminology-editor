@@ -1,6 +1,8 @@
 import { MODULE_DEFINITIONS, MODULE_MAP, normalizeSelectedModules } from "./module-definitions.js";
 import { createDefaultDocument, createDefaultState, createEmptyRecord } from "./state-factory.js";
 
+export const RECORD_PASSTHROUGH_KEY = "_passthrough";
+
 export function pruneEmpty(value) {
   if (Array.isArray(value)) {
     return value
@@ -51,6 +53,7 @@ export function normalizeBundle(candidateBundle = {}) {
 
 export function normalizeRecord(moduleDefinition, candidateRecord = {}) {
   const record = createEmptyRecord(moduleDefinition);
+  const knownFieldKeys = new Set(moduleDefinition.fields.map((fieldDefinition) => fieldDefinition.key));
 
   moduleDefinition.fields.forEach((fieldDefinition) => {
     const value = candidateRecord[fieldDefinition.key];
@@ -66,6 +69,22 @@ export function normalizeRecord(moduleDefinition, candidateRecord = {}) {
 
     record[fieldDefinition.key] = typeof value === "string" ? value : "";
   });
+
+  const passthrough = {};
+  Object.entries(candidateRecord).forEach(([key, value]) => {
+    if (knownFieldKeys.has(key) || key === "model" || key === "_documentId" || key === RECORD_PASSTHROUGH_KEY) {
+      return;
+    }
+    passthrough[key] = value;
+  });
+
+  if (candidateRecord[RECORD_PASSTHROUGH_KEY] && typeof candidateRecord[RECORD_PASSTHROUGH_KEY] === "object") {
+    Object.assign(passthrough, candidateRecord[RECORD_PASSTHROUGH_KEY]);
+  }
+
+  if (Object.keys(passthrough).length) {
+    record[RECORD_PASSTHROUGH_KEY] = passthrough;
+  }
 
   return record;
 }

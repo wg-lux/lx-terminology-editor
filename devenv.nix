@@ -1,6 +1,12 @@
 { pkgs, lib, config, inputs, ... }:
 
+let
+  uvPackage = pkgs.uv;
+in
 {
+
+
+
   # 1. Enable Node.js for modern JS tooling
   languages.javascript = {
     enable = true;
@@ -14,7 +20,14 @@
       PyYAML
       pydantic
     '';
+    uv = {
+      enable = true;
+      package = uvPackage;
+      sync.enable = true;
+    };
   };
+
+
 
   # Startet den Editor-Server automatisch bei 'devenv up'
   processes.editor-server.exec = "python server.py";

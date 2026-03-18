@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+server.py
+lx_terminology_editor.egg-info/PKG-INFO
+lx_terminology_editor.egg-info/SOURCES.txt
+lx_terminology_editor.egg-info/dependency_links.txt
+lx_terminology_editor.egg-info/entry_points.txt
+lx_terminology_editor.egg-info/requires.txt
+lx_terminology_editor.egg-info/top_level.txt

@@ -378,7 +378,7 @@ export function mountApp({ store }) {
 
     const documentHint = document.createElement("p");
     documentHint.className = "document-hint";
-    documentHint.textContent = "Waehle oder benenne die YAML-Datei fuer dieses Modul.";
+    documentHint.textContent = "Wähle oder benenne die YAML-Datei für dieses Modul.";
 
     documentMeta.append(documentLabel, documentHint);
 
