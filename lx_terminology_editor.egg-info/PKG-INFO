@@ -39,6 +39,7 @@ Dann `http://localhost:4173` öffnen.
   - `lx_interventions`
   - `lx_classifications`
   - `lx_classification_choices`
+  - `lx_units`
   - `lx_descriptors`
 - Generates:
   - root `config.yaml`

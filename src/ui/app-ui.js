@@ -3,6 +3,7 @@ import { MODULE_MAP } from "../models/module-definitions.js";
 import { validateBundle } from "../models/validator.js";
 import { downloadTextEntries } from "../utils/download.js";
 import { runLint } from "../utils/lint-api.js";
+import { runPublish } from "../utils/publish-api.js";
 import { downloadBundleZip, importBundleZip } from "../utils/zip-bundle.js";
 import { buildShareUrl } from "../utils/url-hash.js";
 import { stringifyYaml } from "../utils/yaml-helper.js";
@@ -20,10 +21,13 @@ export function mountApp({ store }) {
   const zipImportButton = document.querySelector("#zip-import-button");
   const zipImportInput = document.querySelector("#zip-import-input");
   const lintButtons = document.querySelectorAll('[data-action="lint"]');
+  const publishButtons = document.querySelectorAll('[data-action="publish"]');
   const resetButton = document.querySelector("#reset-button");
   const cardTemplate = document.querySelector("#record-card-template");
   const lintStatus = document.querySelector("#lint-status");
   const lintOutput = document.querySelector("#lint-output");
+  const publishStatus = document.querySelector("#publish-status");
+  const publishOutput = document.querySelector("#publish-output");
 
   let activeModuleKey = store.getState().bundle.modules[0] || "lx_examinations";
   let activePreviewGroupKey = "root";
@@ -33,6 +37,11 @@ export function mountApp({ store }) {
     status: "idle",
     summary: "Noch nicht ausgeführt.",
     output: "Noch keine Lint-Ausgabe.",
+  };
+  let publishState = {
+    status: "idle",
+    summary: "Noch nicht veröffentlicht.",
+    output: "Noch keine Publish-Ausgabe.",
   };
 
   shareButton.addEventListener("click", async () => {
@@ -121,6 +130,36 @@ export function mountApp({ store }) {
     });
   });
 
+  publishButtons.forEach((publishButton) => {
+    publishButton.addEventListener("click", async () => {
+      publishState = {
+        status: "running",
+        summary: "Publish läuft...",
+        output: "Schreibe Bundle und aktualisiere KB-Registry...",
+      };
+      render(store.getState());
+
+      try {
+        const result = await runPublish(store.getState());
+        publishState = {
+          status: result.ok ? "ok" : "error",
+          summary: result.summary_text,
+          output: result.output || "Keine Ausgabe.",
+        };
+        showToast(result.ok ? "Publish erfolgreich." : "Publish mit Fehlern beendet.");
+      } catch (error) {
+        publishState = {
+          status: "error",
+          summary: "Publish-Aufruf fehlgeschlagen.",
+          output: error.payload?.output || error.message || "Unbekannter Fehler.",
+        };
+        showToast("Publish-Aufruf fehlgeschlagen.");
+      }
+
+      render(store.getState());
+    });
+  });
+
   resetButton.addEventListener("click", () => {
     store.reset();
     activeModuleKey = store.getState().bundle.modules[0] || "lx_examinations";
@@ -135,6 +174,7 @@ export function mountApp({ store }) {
     const state = store.getState();
     renderPreview(state);
     renderLintPanel();
+    renderPublishPanel();
   }
 
   function render(state) {
@@ -156,6 +196,7 @@ export function mountApp({ store }) {
       renderModuleEditor(state, validation);
       renderPreview(state, previewGroups);
       renderLintPanel();
+      renderPublishPanel();
     } catch (error) {
       console.error("UI render failed", error);
       moduleEditor.innerHTML = "";
@@ -178,6 +219,7 @@ export function mountApp({ store }) {
     const fields = [
       { key: "name", label: "Bundle-Name", type: "text", hint: "Wird in das Feld `name` der root config.yaml geschrieben." },
       { key: "version", label: "Version", type: "text", hint: "Semantische Version empfohlen." },
+      { key: "publish.name", label: "Publish-Name", type: "text", hint: "Lokaler Zielname unter `.published/`." },
       { key: "description", label: "Beschreibung", type: "textarea", hint: "Optionale Paketbeschreibung.", full: true },
     ];
 
@@ -195,9 +237,16 @@ export function mountApp({ store }) {
       if (fieldDefinition.type !== "textarea") {
         input.type = fieldDefinition.type;
       }
-      input.value = state.bundle[fieldDefinition.key] || "";
+      input.value =
+        fieldDefinition.key === "publish.name"
+          ? state.publish?.name || ""
+          : state.bundle[fieldDefinition.key] || "";
       input.addEventListener("input", (event) => {
-        store.setBundleField(fieldDefinition.key, event.target.value, { emit: false });
+        if (fieldDefinition.key === "publish.name") {
+          store.setPublishField("name", event.target.value, { emit: false });
+        } else {
+          store.setBundleField(fieldDefinition.key, event.target.value, { emit: false });
+        }
         refreshDerivedViews();
       });
 
@@ -599,6 +648,14 @@ export function mountApp({ store }) {
     lintOutput.textContent = lintState.output;
     lintButtons.forEach((lintButton) => {
       lintButton.disabled = lintState.status === "running";
+    });
+  }
+
+  function renderPublishPanel() {
+    publishStatus.textContent = publishState.summary;
+    publishOutput.textContent = publishState.output;
+    publishButtons.forEach((publishButton) => {
+      publishButton.disabled = publishState.status === "running";
     });
   }
 }

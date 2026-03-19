@@ -40,9 +40,15 @@ Dann `http://localhost:4173` öffnen.
 - Downloads generated YAML files individually
 - Exports and imports complete terminology bundles as `.zip`
 - Führt `ok`/`scripts/lint_kb_yaml.py` über einen lokalen API-Endpoint gegen das aktuelle Bundle aus
+- Veröffentlicht das aktuelle Bundle lokal nach `.published/<publish-name>/<version>/`
+- Aktualisiert dabei automatisch `.published/kb_registry.json`
 
 ## Notes
 
 Der Lint-Button schreibt das aktuelle Bundle temporär und ruft dann den
 Knowledge-Base-Linter in `lx-data-models` auf. Das ersetzt noch keine
 schema-basierte Validierung direkt im Browser.
+
+Der Publish-Button schreibt das aktuelle Bundle dauerhaft nach `.published/`
+und ergänzt die lokale KB-Registry, sodass das Ergebnis direkt als
+`LX_DTYPES_KB_REGISTRY`-Quelle verwendet werden kann.

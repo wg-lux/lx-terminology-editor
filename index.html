@@ -24,6 +24,7 @@
           <button id="download-button" class="secondary-button" type="button">YAML-Dateien herunterladen</button>
           <button id="zip-download-button" class="secondary-button" type="button">ZIP herunterladen</button>
           <button id="zip-import-button" class="ghost-button" type="button">ZIP importieren</button>
+          <button data-action="publish" class="primary-button" type="button">Veröffentlichen</button>
           <button data-action="lint" class="secondary-button" type="button">Mit ok prüfen</button>
         </div>
       </header>
@@ -80,6 +81,18 @@
               <p class="muted" id="lint-status">Noch nicht ausgeführt.</p>
             </div>
             <pre class="preview-code lint-code"><code id="lint-output">Noch keine Lint-Ausgabe.</code></pre>
+          </div>
+
+          <div class="lint-panel">
+            <div class="panel-header panel-header-inline">
+              <div>
+                <p class="section-kicker">Publish</p>
+                <h2>Bundle veröffentlichen</h2>
+                <button data-action="publish" class="primary-button" type="button">Veröffentlichen</button>
+              </div>
+              <p class="muted" id="publish-status">Noch nicht veröffentlicht.</p>
+            </div>
+            <pre class="preview-code lint-code"><code id="publish-output">Noch keine Publish-Ausgabe.</code></pre>
           </div>
         </section>
       </main>

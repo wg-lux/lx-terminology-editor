@@ -28,6 +28,9 @@ export function createDefaultState() {
       version: "0.1.0",
       modules: normalizeSelectedModules(MODULE_DEFINITIONS.map((moduleDefinition) => moduleDefinition.key)),
     },
+    publish: {
+      name: "example_terminology",
+    },
     documents: {},
     records: {},
   };

@@ -17,18 +17,24 @@ LX_DATA_MODELS_ROOT = ROOT / "lx-data-models"
 KB_LINT_MODULE_PATH = LX_DATA_MODELS_ROOT / "lx_kb_lint.py"
 PORT = 4173
 RECORD_PASSTHROUGH_KEY = "_passthrough"
+PUBLISHED_ROOT = ROOT / ".published"
 
 
 def normalize_state(candidate: dict) -> dict:
     bundle = candidate.get("bundle", {})
+    publish = candidate.get("publish", {})
     documents = candidate.get("documents", {})
     records = candidate.get("records", {})
+    publish_name = str(publish.get("name", bundle.get("name", "example_terminology"))).strip()
     return {
         "bundle": {
             "name": bundle.get("name", "example_terminology"),
             "description": bundle.get("description", ""),
             "version": bundle.get("version", "0.1.0"),
             "modules": list(bundle.get("modules", [])),
+        },
+        "publish": {
+            "name": publish_name or str(bundle.get("name", "example_terminology")).strip() or "example_terminology",
         },
         "documents": documents if isinstance(documents, dict) else {},
         "records": records if isinstance(records, dict) else {},
@@ -199,6 +205,59 @@ def run_lint(state: dict) -> dict[str, object]:
         shutil.rmtree(temp_root, ignore_errors=True)
 
 
+def publish_bundle(state: dict) -> dict[str, object]:
+    normalized_state = normalize_state(state)
+    file_map = build_file_map(normalized_state)
+    module_name = str(normalized_state["bundle"]["name"]).strip() or "example_terminology"
+    version = str(normalized_state["bundle"]["version"]).strip() or "0.1.0"
+    publish_name = str(normalized_state["publish"]["name"]).strip() or module_name
+
+    target_root = (PUBLISHED_ROOT / publish_name / version).resolve()
+    registry_path = (PUBLISHED_ROOT / "kb_registry.json").resolve()
+
+    if target_root.exists():
+        shutil.rmtree(target_root)
+    target_root.mkdir(parents=True, exist_ok=True)
+
+    for relative_path, content in file_map.items():
+        target = target_root / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+    if registry_path.exists():
+        registry_payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    else:
+        registry_payload = {"modules": {}}
+
+    modules = registry_payload.setdefault("modules", {})
+    module_versions = modules.setdefault(module_name, {})
+    module_versions[version] = {
+        "input_dirs": [str(target_root)],
+    }
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(
+        json.dumps(registry_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    return {
+        "ok": True,
+        "summary_text": f"{module_name}@{version} veröffentlicht.",
+        "output": (
+            f"Publish name: {publish_name}\n"
+            f"Module: {module_name}\n"
+            f"Version: {version}\n"
+            f"Published root: {target_root}\n"
+            f"Registry: {registry_path}"
+        ),
+        "publish_name": publish_name,
+        "module_name": module_name,
+        "version": version,
+        "published_root": str(target_root),
+        "registry_path": str(registry_path),
+    }
+
+
 def load_kb_linter():
     try:
         return importlib.import_module("lx_kb_lint")
@@ -229,7 +288,7 @@ def load_kb_linter():
 
 class AppHandler(SimpleHTTPRequestHandler):
     def do_POST(self) -> None:
-        if self.path != "/api/lint":
+        if self.path not in {"/api/lint", "/api/publish"}:
             self.send_error(HTTPStatus.NOT_FOUND, "Unbekannter Endpoint")
             return
 
@@ -237,12 +296,23 @@ class AppHandler(SimpleHTTPRequestHandler):
             content_length = int(self.headers.get("Content-Length", "0"))
             raw_body = self.rfile.read(content_length).decode("utf-8")
             payload = json.loads(raw_body or "{}")
-            result = run_lint(payload.get("state", {}))
+            if self.path == "/api/publish":
+                result = publish_bundle(payload.get("state", {}))
+            else:
+                result = run_lint(payload.get("state", {}))
             self._send_json(HTTPStatus.OK, result)
         except Exception as error:  # pragma: no cover - local dev endpoint
             self._send_json(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
-                {"error": str(error), "output": str(error), "summary_text": "Lint-Aufruf fehlgeschlagen."},
+                {
+                    "error": str(error),
+                    "output": str(error),
+                    "summary_text": (
+                        "Publish-Aufruf fehlgeschlagen."
+                        if self.path == "/api/publish"
+                        else "Lint-Aufruf fehlgeschlagen."
+                    ),
+                },
             )
 
     def log_message(self, format: str, *args: object) -> None:

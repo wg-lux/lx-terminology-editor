@@ -116,6 +116,12 @@ export function normalizeState(candidateState = {}) {
   const fallbackState = createDefaultState();
   const normalizedState = {
     bundle: normalizeBundle(candidateState.bundle),
+    publish: {
+      name:
+        typeof candidateState.publish?.name === "string" && candidateState.publish.name.trim()
+          ? candidateState.publish.name
+          : normalizeBundle(candidateState.bundle).name || fallbackState.publish.name,
+    },
     documents: {},
     records: {},
   };

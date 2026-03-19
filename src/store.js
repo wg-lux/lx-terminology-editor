@@ -48,6 +48,17 @@ export function createStore(initialState = createDefaultState()) {
     setBundleField(fieldKey, value, options = {}) {
       mutate((draft) => {
         draft.bundle[fieldKey] = value;
+        if (fieldKey === "name" && (!draft.publish?.name || draft.publish.name === state.publish?.name)) {
+          draft.publish = draft.publish || {};
+          draft.publish.name = value;
+        }
+      }, options);
+    },
+
+    setPublishField(fieldKey, value, options = {}) {
+      mutate((draft) => {
+        draft.publish = draft.publish || {};
+        draft.publish[fieldKey] = value;
       }, options);
     },
 
