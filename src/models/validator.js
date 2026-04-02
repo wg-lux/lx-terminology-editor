@@ -38,6 +38,32 @@ export function splitList(value) {
     .filter(Boolean);
 }
 
+export function parseNumber(value) {
+  if (value === "" || value === null || value === undefined) {
+    return "";
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : "";
+}
+
+export function parseJsonObject(value) {
+  if (value === "" || value === null || value === undefined) {
+    return {};
+  }
+
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
 export function normalizeBundle(candidateBundle = {}) {
   const fallbackBundle = createDefaultState().bundle;
   return {
@@ -59,6 +85,21 @@ export function normalizeRecord(moduleDefinition, candidateRecord = {}) {
     const value = candidateRecord[fieldDefinition.key];
     if (fieldDefinition.type === "tags") {
       record[fieldDefinition.key] = Array.isArray(value) ? value.filter(Boolean) : splitList(value);
+      return;
+    }
+
+    if (fieldDefinition.type === "number") {
+      record[fieldDefinition.key] = parseNumber(value);
+      return;
+    }
+
+    if (fieldDefinition.type === "boolean") {
+      record[fieldDefinition.key] = value === true || value === "true";
+      return;
+    }
+
+    if (fieldDefinition.type === "json") {
+      record[fieldDefinition.key] = parseJsonObject(value);
       return;
     }
 
@@ -166,6 +207,10 @@ export function validateRecord(moduleDefinition, record) {
 
     if (fieldDefinition.type === "select" && value && !fieldDefinition.options.includes(value)) {
       errors.push(`${fieldDefinition.label} muss einer der folgenden Werte sein: ${fieldDefinition.options.join(", ")}.`);
+    }
+
+    if (fieldDefinition.type === "json" && value && (typeof value !== "object" || Array.isArray(value))) {
+      errors.push(`${fieldDefinition.label} muss ein JSON-Objekt sein.`);
     }
   });
 

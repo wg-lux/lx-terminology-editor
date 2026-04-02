@@ -533,6 +533,16 @@ export function mountApp({ store }) {
         }
         refreshDerivedViews();
       });
+    } else if (fieldDefinition.type === "json") {
+      input = document.createElement("textarea");
+      input.value = Object.keys(record[fieldDefinition.key] || {}).length
+        ? JSON.stringify(record[fieldDefinition.key], null, 2)
+        : "";
+      input.placeholder = fieldDefinition.placeholder || "";
+      input.addEventListener("input", (event) => {
+        store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.value, { emit: false });
+        refreshDerivedViews();
+      });
     } else if (fieldDefinition.type === "select") {
       input = document.createElement("select");
       fieldDefinition.options.forEach((optionValue) => {
@@ -545,9 +555,24 @@ export function mountApp({ store }) {
       input.addEventListener("change", (event) => {
         store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.value);
       });
+    } else if (fieldDefinition.type === "boolean") {
+      input = document.createElement("select");
+      [
+        { value: "false", label: "false" },
+        { value: "true", label: "true" },
+      ].forEach((optionValue) => {
+        const option = document.createElement("option");
+        option.value = optionValue.value;
+        option.textContent = optionValue.label;
+        input.append(option);
+      });
+      input.value = record[fieldDefinition.key] ? "true" : "false";
+      input.addEventListener("change", (event) => {
+        store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.value);
+      });
     } else {
       input = document.createElement("input");
-      input.type = "text";
+      input.type = fieldDefinition.type === "number" ? "number" : "text";
       input.placeholder = fieldDefinition.placeholder || "";
       input.value = fieldDefinition.type === "tags" ? (record[fieldDefinition.key] || []).join(", ") : record[fieldDefinition.key] || "";
       input.addEventListener("input", (event) => {
@@ -565,6 +590,8 @@ export function mountApp({ store }) {
       recordErrors.find((error) => error.startsWith(fieldDefinition.label)) ||
       (fieldDefinition.type === "tags"
         ? "Werte durch Kommas trennen."
+        : fieldDefinition.type === "json"
+          ? "JSON-Objekt, z.B. {\"low\": 0, \"high\": 100}."
         : "Optional, sofern der nachgelagerte Validator das Feld nicht verlangt.");
 
     wrapper.append(input, hint);

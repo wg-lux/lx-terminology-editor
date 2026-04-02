@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import importlib.util
 import importlib
+import os
 from http import HTTPStatus
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -18,6 +19,7 @@ KB_LINT_MODULE_PATH = LX_DATA_MODELS_ROOT / "lx_kb_lint.py"
 PORT = 4173
 RECORD_PASSTHROUGH_KEY = "_passthrough"
 PUBLISHED_ROOT = ROOT / ".published"
+TARGET_DATA_ROOT_ENV = "LX_TERMINOLOGY_EDITOR_TARGET_DATA_ROOT"
 
 
 def normalize_state(candidate: dict) -> dict:
@@ -122,9 +124,10 @@ def build_file_map(state: dict) -> dict[str, str]:
     }
 
     module_defaults = {
-        "lx_examinations": {"model": "examination", "depends_on": ["lx_findings", "lx_interventions"]},
-        "lx_findings": {"model": "finding", "depends_on": ["lx_classifications"]},
-        "lx_interventions": {"model": "intervention", "depends_on": []},
+        "lx_examinations": {"model": "examination", "depends_on": ["lx_findings", "lx_interventions", "lx_indications"]},
+        "lx_findings": {"model": "finding", "depends_on": ["lx_classifications", "lx_interventions"]},
+        "lx_indications": {"model": "indication", "depends_on": ["lx_classifications", "lx_interventions"]},
+        "lx_interventions": {"model": "intervention", "depends_on": ["lx_classifications"]},
         "lx_classifications": {"model": "classification", "depends_on": ["lx_classification_choices"]},
         "lx_classification_choices": {"model": "classification_choice", "depends_on": ["lx_descriptors"]},
         "lx_units": {"model": "unit", "depends_on": []},
@@ -205,6 +208,26 @@ def run_lint(state: dict) -> dict[str, object]:
         shutil.rmtree(temp_root, ignore_errors=True)
 
 
+def resolve_publish_target_root(
+    *,
+    publish_name: str,
+    version: str,
+) -> tuple[Path, Path | None, str]:
+    configured_target_root = os.getenv(TARGET_DATA_ROOT_ENV, "").strip()
+    if configured_target_root:
+        return (
+            Path(configured_target_root).expanduser().resolve(),
+            None,
+            "target_data_root",
+        )
+
+    return (
+        (PUBLISHED_ROOT / publish_name / version).resolve(),
+        (PUBLISHED_ROOT / "kb_registry.json").resolve(),
+        "published_registry",
+    )
+
+
 def publish_bundle(state: dict) -> dict[str, object]:
     normalized_state = normalize_state(state)
     file_map = build_file_map(normalized_state)
@@ -212,8 +235,10 @@ def publish_bundle(state: dict) -> dict[str, object]:
     version = str(normalized_state["bundle"]["version"]).strip() or "0.1.0"
     publish_name = str(normalized_state["publish"]["name"]).strip() or module_name
 
-    target_root = (PUBLISHED_ROOT / publish_name / version).resolve()
-    registry_path = (PUBLISHED_ROOT / "kb_registry.json").resolve()
+    target_root, registry_path, publish_mode = resolve_publish_target_root(
+        publish_name=publish_name,
+        version=version,
+    )
 
     if target_root.exists():
         shutil.rmtree(target_root)
@@ -224,37 +249,44 @@ def publish_bundle(state: dict) -> dict[str, object]:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
 
-    if registry_path.exists():
-        registry_payload = json.loads(registry_path.read_text(encoding="utf-8"))
-    else:
-        registry_payload = {"modules": {}}
+    if registry_path is not None:
+        if registry_path.exists():
+            registry_payload = json.loads(registry_path.read_text(encoding="utf-8"))
+        else:
+            registry_payload = {"modules": {}}
 
-    modules = registry_payload.setdefault("modules", {})
-    module_versions = modules.setdefault(module_name, {})
-    module_versions[version] = {
-        "input_dirs": [str(target_root)],
-    }
-    registry_path.parent.mkdir(parents=True, exist_ok=True)
-    registry_path.write_text(
-        json.dumps(registry_payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+        modules = registry_payload.setdefault("modules", {})
+        module_versions = modules.setdefault(module_name, {})
+        module_versions[version] = {
+            "input_dirs": [str(target_root)],
+        }
+        registry_path.parent.mkdir(parents=True, exist_ok=True)
+        registry_path.write_text(
+            json.dumps(registry_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     return {
         "ok": True,
         "summary_text": f"{module_name}@{version} veröffentlicht.",
         "output": (
+            f"Publish mode: {publish_mode}\n"
             f"Publish name: {publish_name}\n"
             f"Module: {module_name}\n"
             f"Version: {version}\n"
             f"Published root: {target_root}\n"
-            f"Registry: {registry_path}"
+            + (
+                f"Registry: {registry_path}"
+                if registry_path is not None
+                else "Registry: not updated"
+            )
         ),
         "publish_name": publish_name,
         "module_name": module_name,
         "version": version,
+        "publish_mode": publish_mode,
         "published_root": str(target_root),
-        "registry_path": str(registry_path),
+        "registry_path": str(registry_path) if registry_path is not None else None,
     }
 
 
