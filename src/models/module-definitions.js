@@ -1,5 +1,6 @@
 const VALIDATOR_OPERATOR_OPTIONS = ["exists", "missing", "condition"];
 const VALIDATOR_PRECEDENCE_OPTIONS = ["required", "optional"];
+const NUMERIC_DISTRIBUTION_OPTIONS = ["unknown", "uniform", "normal", "log_normal", "exponential"];
 
 export const MODULE_DEFINITIONS = [
   {
@@ -263,7 +264,13 @@ export const MODULE_DEFINITIONS = [
         type: "textarea",
         placeholder: "Numerischer Wert in Minuten.",
       },
-      { key: "unit", label: "Einheit", type: "text", placeholder: "minutes" },
+      {
+        key: "unit",
+        label: "Einheit",
+        type: "reference",
+        sourceModule: "lx_units",
+        placeholder: "Einheit auswählen",
+      },
       {
         key: "classification_choice_descriptor_type",
         label: "Deskriptortyp",
@@ -275,14 +282,13 @@ export const MODULE_DEFINITIONS = [
       {
         key: "numeric_distribution",
         label: "Numerische Verteilung",
-        type: "text",
-        placeholder: "uniform",
+        type: "select",
+        options: NUMERIC_DISTRIBUTION_OPTIONS,
       },
       {
         key: "numeric_distribution_params",
-        label: "Verteilungsparameter (JSON)",
-        type: "json",
-        placeholder: '{"low": 0, "high": 100}',
+        label: "Verteilungsparameter",
+        type: "numeric-distribution-params",
       },
       { key: "text_max_length", label: "Textlänge Maximum", type: "number", placeholder: "255" },
       { key: "default_value_str", label: "Standardwert Text", type: "text", placeholder: "normal" },
@@ -304,9 +310,8 @@ export const MODULE_DEFINITIONS = [
       },
       {
         key: "selection_default_options",
-        label: "Standardoptionen (JSON)",
-        type: "json",
-        placeholder: '{"adenoma": 1}',
+        label: "Standardoptionen",
+        type: "selection-default-options",
       },
     ],
   },

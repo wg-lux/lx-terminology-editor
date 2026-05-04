@@ -16,6 +16,7 @@ const FIELD_OPTION_LABELS = {
   dermatology: "Dermatologie",
   emergency_medicine: "Notfallmedizin",
   endocrinology: "Endokrinologie",
+  exponential: "Exponentialverteilung",
   exists: "muss vorhanden sein",
   findings: "Befunde",
   general_medicine: "Allgemeinmedizin",
@@ -26,9 +27,11 @@ const FIELD_OPTION_LABELS = {
   intensive_care: "Intensivmedizin",
   internal_medicine: "Innere Medizin",
   laboratory_medicine: "Labormedizin",
+  log_normal: "Log-Normalverteilung",
   missing: "muss fehlen",
   nephrology: "Nephrologie",
   neurology: "Neurologie",
+  normal: "Normalverteilung",
   oncology: "Onkologie",
   optional: "optional",
   orthopedics: "Orthopädie",
@@ -45,6 +48,8 @@ const FIELD_OPTION_LABELS = {
   numeric: "Zahl",
   selection: "Auswahl",
   text: "Text",
+  uniform: "Gleichverteilung",
+  unknown: "nicht festgelegt",
   urology: "Urologie",
 };
 
@@ -691,7 +696,20 @@ export function mountApp({ store }) {
 
   function createField(fieldDefinition, record, recordErrors, recordIndex, title) {
     const wrapper = document.createElement("div");
-    wrapper.className = `field${["textarea", "tags", "reference-tags", "json", "json-list", "validator-rule"].includes(fieldDefinition.type) ? " field-full" : ""}`;
+    wrapper.className = `field${
+      [
+        "textarea",
+        "tags",
+        "reference-tags",
+        "json",
+        "json-list",
+        "validator-rule",
+        "numeric-distribution-params",
+        "selection-default-options",
+      ].includes(fieldDefinition.type)
+        ? " field-full"
+        : ""
+    }`;
 
     const label = document.createElement("label");
     label.textContent = fieldDefinition.label;
@@ -736,6 +754,10 @@ export function mountApp({ store }) {
       input = createReferenceTagsInput(fieldDefinition, record, recordIndex);
     } else if (fieldDefinition.type === "validator-rule") {
       input = createValidatorRuleInput(fieldDefinition, record, recordIndex);
+    } else if (fieldDefinition.type === "numeric-distribution-params") {
+      input = createNumericDistributionParamsInput(fieldDefinition, record, recordIndex);
+    } else if (fieldDefinition.type === "selection-default-options") {
+      input = createSelectionDefaultOptionsInput(fieldDefinition, record, recordIndex);
     } else if (fieldDefinition.type === "json" || fieldDefinition.type === "json-list") {
       input = document.createElement("textarea");
       input.placeholder = fieldDefinition.placeholder || "";
@@ -765,6 +787,9 @@ export function mountApp({ store }) {
         }
         refreshDerivedViews();
       });
+      if (fieldDefinition.key === "selection_options") {
+        input.addEventListener("change", () => render(store.getState()));
+      }
     }
 
     const hint = document.createElement("p");
@@ -782,6 +807,10 @@ export function mountApp({ store }) {
       defaultHint = "JSON-Liste eingeben.";
     } else if (fieldDefinition.type === "validator-rule") {
       defaultHint = "Der Textbaustein wird aus der Regel erzeugt und als lx-data-models-Regel exportiert.";
+    } else if (fieldDefinition.type === "numeric-distribution-params") {
+      defaultHint = "Die Eingaben werden als lx-data-models-Verteilungsparameter exportiert.";
+    } else if (fieldDefinition.type === "selection-default-options") {
+      defaultHint = "Die Eingaben werden als lx-data-models-Standardoptionen exportiert.";
     } else if (fieldDefinition.type === "boolean") {
       defaultHint = "Häkchen setzen, wenn ja.";
     }
@@ -935,6 +964,131 @@ export function mountApp({ store }) {
 
     container.append(controls);
     return container;
+  }
+
+  function createNumericDistributionParamsInput(fieldDefinition, record, recordIndex) {
+    const container = document.createElement("div");
+    container.className = "validator-rule-builder";
+    const params = getObjectFieldValue(record[fieldDefinition.key]);
+
+    const ruleText = document.createElement("p");
+    ruleText.className = "rule-text-block";
+    ruleText.textContent = buildNumericDistributionText(record, params);
+    container.append(ruleText);
+
+    const controls = document.createElement("div");
+    controls.className = "rule-builder-grid";
+    const lowInput = createDescriptorNumberInput("Untergrenze", params.low ?? record.numeric_min ?? "", "0");
+    const highInput = createDescriptorNumberInput("Obergrenze", params.high ?? record.numeric_max ?? "", "100");
+    controls.append(lowInput.wrapper, highInput.wrapper);
+
+    const writeParams = () => {
+      const nextParams = { ...params };
+      setOptionalNumber(nextParams, "low", lowInput.input.value);
+      setOptionalNumber(nextParams, "high", highInput.input.value);
+      store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, nextParams, { emit: false });
+      ruleText.textContent = buildNumericDistributionText(record, nextParams);
+      refreshDerivedViews();
+    };
+
+    lowInput.input.addEventListener("input", writeParams);
+    highInput.input.addEventListener("input", writeParams);
+    container.append(controls);
+    return container;
+  }
+
+  function createSelectionDefaultOptionsInput(fieldDefinition, record, recordIndex) {
+    const container = document.createElement("div");
+    container.className = "validator-rule-builder";
+    const params = getObjectFieldValue(record[fieldDefinition.key]);
+    const optionValues = mergeUniqueValues([...(Array.isArray(record.selection_options) ? record.selection_options : []), ...Object.keys(params)]);
+
+    const ruleText = document.createElement("p");
+    ruleText.className = "rule-text-block";
+    ruleText.textContent = buildSelectionDefaultsText(optionValues, params);
+    container.append(ruleText);
+
+    if (!optionValues.length) {
+      return container;
+    }
+
+    const controls = document.createElement("div");
+    controls.className = "rule-builder-grid";
+    const optionInputs = optionValues.map((optionValue) => {
+      const control = createDescriptorNumberInput(optionValue, params[optionValue] ?? "", "0 bis 1");
+      controls.append(control.wrapper);
+      return { optionValue, input: control.input };
+    });
+
+    const writeDefaults = () => {
+      const nextParams = { ...params };
+      optionInputs.forEach(({ optionValue, input }) => {
+        setOptionalNumber(nextParams, optionValue, input.value);
+      });
+      store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, nextParams, { emit: false });
+      ruleText.textContent = buildSelectionDefaultsText(optionValues, nextParams);
+      refreshDerivedViews();
+    };
+
+    optionInputs.forEach(({ input }) => {
+      input.addEventListener("input", writeDefaults);
+    });
+
+    container.append(controls);
+    return container;
+  }
+
+  function createDescriptorNumberInput(labelText, currentValue, placeholder) {
+    const wrapper = document.createElement("label");
+    wrapper.className = "rule-control";
+    const text = document.createElement("span");
+    text.textContent = labelText;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.step = "any";
+    input.placeholder = placeholder;
+    input.value = currentValue === undefined || currentValue === null ? "" : String(currentValue);
+    wrapper.append(text, input);
+    return { wrapper, input };
+  }
+
+  function getObjectFieldValue(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  }
+
+  function mergeUniqueValues(values) {
+    return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+  }
+
+  function setOptionalNumber(target, key, value) {
+    const trimmed = String(value ?? "").trim();
+    if (!trimmed) {
+      delete target[key];
+      return;
+    }
+    const numericValue = Number(trimmed);
+    if (Number.isFinite(numericValue)) {
+      target[key] = numericValue;
+    }
+  }
+
+  function buildNumericDistributionText(record, params) {
+    const distribution = optionLabel(record.numeric_distribution || "uniform");
+    const lowText = params.low === undefined || params.low === "" ? "ohne feste Untergrenze" : `${params.low}`;
+    const highText = params.high === undefined || params.high === "" ? "ohne feste Obergrenze" : `${params.high}`;
+    return `Numerische Werte werden mit der Verteilung ${distribution} von ${lowText} bis ${highText} erwartet.`;
+  }
+
+  function buildSelectionDefaultsText(optionValues, params) {
+    if (!optionValues.length) {
+      return "Bitte zuerst Auswahloptionen eintragen. Danach können hier Standardgewichte gesetzt werden.";
+    }
+    const configured = optionValues
+      .filter((optionValue) => params[optionValue] !== undefined && params[optionValue] !== "")
+      .map((optionValue) => `${optionValue}: ${params[optionValue]}`);
+    return configured.length
+      ? `Standardgewichte: ${configured.join(", ")}.`
+      : "Keine Standardgewichte gesetzt. Ohne Eingabe bleibt die Auswahl gleichwertig.";
   }
 
   function createRuleSelect(labelText, placeholderText, currentValue, appendOptions) {

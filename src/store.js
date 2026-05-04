@@ -9,6 +9,8 @@ import {
   splitList,
 } from "./models/validator.js";
 
+const OBJECT_FIELD_TYPES = new Set(["json", "validator-rule", "numeric-distribution-params", "selection-default-options"]);
+
 function cloneState(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -192,7 +194,7 @@ export function createStore(initialState = createDefaultState()) {
           return;
         }
 
-        if (fieldDefinition.type === "json" || fieldDefinition.type === "validator-rule") {
+        if (OBJECT_FIELD_TYPES.has(fieldDefinition.type)) {
           draft.records[moduleKey][recordIndex][fieldKey] = parseJsonObject(value);
           return;
         }

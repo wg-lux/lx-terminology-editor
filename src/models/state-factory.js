@@ -1,5 +1,7 @@
 import { MODULE_DEFINITIONS, normalizeSelectedModules } from "./module-definitions.js";
 
+const OBJECT_FIELD_TYPES = new Set(["json", "validator-rule", "numeric-distribution-params", "selection-default-options"]);
+
 export function createDefaultDocument(moduleKey, name = "custom.yaml") {
   return {
     id: `${moduleKey}-${Math.random().toString(36).slice(2, 10)}`,
@@ -15,7 +17,7 @@ export function createEmptyRecord(moduleDefinition) {
       record[fieldDefinition.key] = "";
     } else if (fieldDefinition.type === "boolean") {
       record[fieldDefinition.key] = false;
-    } else if (fieldDefinition.type === "json" || fieldDefinition.type === "validator-rule") {
+    } else if (OBJECT_FIELD_TYPES.has(fieldDefinition.type)) {
       record[fieldDefinition.key] = {};
     } else if (fieldDefinition.type === "json-list") {
       record[fieldDefinition.key] = [];

@@ -6,16 +6,22 @@ const SELECT_OPTION_LABELS = {
   boolean: "Ja/Nein",
   condition: "Bedingung",
   exists: "muss vorhanden sein",
+  exponential: "Exponentialverteilung",
   findings: "Befunde",
   history: "Anamnese",
+  log_normal: "Log-Normalverteilung",
   missing: "muss fehlen",
+  normal: "Normalverteilung",
   numeric: "Zahl",
   optional: "optional",
   patient_data: "Patientendaten",
   required: "erforderlich",
   selection: "Auswahl",
   text: "Text",
+  uniform: "Gleichverteilung",
+  unknown: "nicht festgelegt",
 };
+const OBJECT_FIELD_TYPES = new Set(["json", "validator-rule", "numeric-distribution-params", "selection-default-options"]);
 
 function formatSelectOptions(options) {
   return options.map((option) => SELECT_OPTION_LABELS[option] || option).join(", ");
@@ -140,7 +146,7 @@ export function normalizeRecord(moduleDefinition, candidateRecord = {}) {
       return;
     }
 
-    if (fieldDefinition.type === "json" || fieldDefinition.type === "validator-rule") {
+    if (OBJECT_FIELD_TYPES.has(fieldDefinition.type)) {
       record[fieldDefinition.key] = parseJsonObject(value);
       return;
     }
@@ -252,11 +258,12 @@ export function validateRecord(moduleDefinition, record) {
     }
 
     if (
-      (fieldDefinition.type === "json" || fieldDefinition.type === "validator-rule") &&
+      OBJECT_FIELD_TYPES.has(fieldDefinition.type) &&
       value &&
       (typeof value !== "object" || Array.isArray(value))
     ) {
-      errors.push(`${fieldDefinition.label} muss ein JSON-Objekt sein.`);
+      const objectLabel = fieldDefinition.type === "json" ? "JSON-Objekt" : "eine strukturierte Eingabe";
+      errors.push(`${fieldDefinition.label} muss ${objectLabel} sein.`);
     }
 
     if (fieldDefinition.type === "json-list" && value && !Array.isArray(value)) {
