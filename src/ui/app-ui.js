@@ -806,44 +806,62 @@ export function mountApp({ store }) {
   function createReferenceTagsInput(fieldDefinition, record, recordIndex) {
     const container = document.createElement("div");
     container.className = "reference-picker";
-    const selectedValues = Array.isArray(record[fieldDefinition.key]) ? record[fieldDefinition.key] : [];
-    const sourceRecords = (store.getState().records?.[fieldDefinition.sourceModule] || []).filter((sourceRecord) =>
+    const storedValues = Array.isArray(record[fieldDefinition.key]) ? record[fieldDefinition.key] : [];
+    const allSourceRecords = (store.getState().records?.[fieldDefinition.sourceModule] || []).filter((sourceRecord) =>
       String(sourceRecord?.name || "").trim(),
     );
+    const matchingSourceRecords = fieldDefinition.matchField
+      ? allSourceRecords.filter((sourceRecord) => sourceRecord[fieldDefinition.matchField] === record.name)
+      : allSourceRecords;
+    const selectedValues = fieldDefinition.computed
+      ? matchingSourceRecords.map((sourceRecord) => sourceRecord.name)
+      : storedValues;
+    const sourceRecords = fieldDefinition.computed
+      ? matchingSourceRecords
+      : matchingSourceRecords.filter(
+          (sourceRecord) => !fieldDefinition.matchField || selectedValues.includes(sourceRecord.name) || sourceRecord[fieldDefinition.matchField] === record.name,
+        );
 
-    const select = document.createElement("select");
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = fieldDefinition.placeholder || "Eintrag auswählen";
-    select.append(placeholder);
+    let select = null;
+    if (!fieldDefinition.computed) {
+      select = document.createElement("select");
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = fieldDefinition.placeholder || "Eintrag auswählen";
+      select.append(placeholder);
 
-    sourceRecords
-      .filter((sourceRecord) => !selectedValues.includes(sourceRecord.name))
-      .forEach((sourceRecord) => {
-        const option = document.createElement("option");
-        option.value = sourceRecord.name;
-        option.textContent =
-          sourceRecord.name_de && sourceRecord.name_de !== sourceRecord.name
-            ? `${sourceRecord.name_de} (${sourceRecord.name})`
-            : sourceRecord.name;
-        select.append(option);
+      sourceRecords
+        .filter((sourceRecord) => !selectedValues.includes(sourceRecord.name))
+        .forEach((sourceRecord) => {
+          const option = document.createElement("option");
+          option.value = sourceRecord.name;
+          option.textContent =
+            sourceRecord.name_de && sourceRecord.name_de !== sourceRecord.name
+              ? `${sourceRecord.name_de} (${sourceRecord.name})`
+              : sourceRecord.name;
+          select.append(option);
+        });
+
+      select.disabled = sourceRecords.length === 0 || sourceRecords.length === selectedValues.length;
+      select.addEventListener("change", (event) => {
+        const nextValue = event.target.value;
+        if (!nextValue || selectedValues.includes(nextValue)) {
+          return;
+        }
+        store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, [...selectedValues, nextValue]);
       });
-
-    select.disabled = sourceRecords.length === 0 || sourceRecords.length === selectedValues.length;
-    select.addEventListener("change", (event) => {
-      const nextValue = event.target.value;
-      if (!nextValue || selectedValues.includes(nextValue)) {
-        return;
-      }
-      store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, [...selectedValues, nextValue]);
-    });
+    }
 
     const chipList = document.createElement("div");
     chipList.className = "reference-chip-list";
     if (!selectedValues.length) {
       const empty = document.createElement("p");
       empty.className = "reference-empty";
-      empty.textContent = sourceRecords.length ? "Noch keine Befunde ausgewählt." : "Bitte zuerst Befunde anlegen.";
+      empty.textContent = fieldDefinition.computed
+        ? "Keine passenden Validatoren vorhanden."
+        : sourceRecords.length
+          ? "Noch keine Einträge ausgewählt."
+          : "Bitte zuerst passende Einträge anlegen.";
       chipList.append(empty);
     }
 
@@ -851,22 +869,29 @@ export function mountApp({ store }) {
       const sourceRecord = sourceRecords.find((candidate) => candidate.name === value);
       const chip = document.createElement("button");
       chip.type = "button";
-      chip.className = "reference-chip";
+      chip.className = `reference-chip${fieldDefinition.computed ? " readonly" : ""}`;
       chip.textContent =
-        sourceRecord?.name_de && sourceRecord.name_de !== value ? `${sourceRecord.name_de} ×` : `${value} ×`;
-      chip.title = `${value} entfernen`;
-      chip.addEventListener("click", () => {
-        store.updateRecordField(
-          activeModuleKey,
-          recordIndex,
-          fieldDefinition.key,
-          selectedValues.filter((selectedValue) => selectedValue !== value),
-        );
-      });
+        sourceRecord?.name_de && sourceRecord.name_de !== value
+          ? `${sourceRecord.name_de}${fieldDefinition.computed ? ` (${value})` : " ×"}`
+          : `${value}${fieldDefinition.computed ? "" : " ×"}`;
+      if (!fieldDefinition.computed) {
+        chip.title = `${value} entfernen`;
+        chip.addEventListener("click", () => {
+          store.updateRecordField(
+            activeModuleKey,
+            recordIndex,
+            fieldDefinition.key,
+            selectedValues.filter((selectedValue) => selectedValue !== value),
+          );
+        });
+      }
       chipList.append(chip);
     });
 
-    container.append(select, chipList);
+    if (select) {
+      container.append(select);
+    }
+    container.append(chipList);
     return container;
   }
 
