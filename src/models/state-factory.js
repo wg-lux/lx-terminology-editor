@@ -9,7 +9,7 @@ export function createDefaultDocument(moduleKey, name = "custom.yaml") {
 
 export function createEmptyRecord(moduleDefinition) {
   return moduleDefinition.fields.reduce((record, fieldDefinition) => {
-    if (fieldDefinition.type === "tags") {
+    if (fieldDefinition.type === "tags" || fieldDefinition.type === "reference-tags") {
       record[fieldDefinition.key] = [];
     } else if (fieldDefinition.type === "number") {
       record[fieldDefinition.key] = "";
@@ -17,6 +17,8 @@ export function createEmptyRecord(moduleDefinition) {
       record[fieldDefinition.key] = false;
     } else if (fieldDefinition.type === "json") {
       record[fieldDefinition.key] = {};
+    } else if (fieldDefinition.type === "json-list") {
+      record[fieldDefinition.key] = [];
     } else if (fieldDefinition.type === "select") {
       record[fieldDefinition.key] = fieldDefinition.options[0];
     } else {

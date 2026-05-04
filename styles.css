@@ -253,6 +253,32 @@ h1 {
   resize: vertical;
 }
 
+.reference-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.reference-chip-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reference-chip {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: rgba(31, 79, 89, 0.1);
+  color: var(--secondary);
+  cursor: pointer;
+}
+
+.reference-empty {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .field-hint {
   margin-top: 8px;
   font-size: 0.86rem;

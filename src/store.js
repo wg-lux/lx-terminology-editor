@@ -1,6 +1,13 @@
 import { collectDependencies, collectDependents, getModuleDefinition, getModuleKeys } from "./models/module-definitions.js";
 import { createDefaultDocument, createDefaultState, createEmptyRecord } from "./models/state-factory.js";
-import { normalizeDocumentName, normalizeState, parseJsonObject, parseNumber, splitList } from "./models/validator.js";
+import {
+  normalizeDocumentName,
+  normalizeState,
+  parseJsonList,
+  parseJsonObject,
+  parseNumber,
+  splitList,
+} from "./models/validator.js";
 
 function cloneState(value) {
   return JSON.parse(JSON.stringify(value));
@@ -148,7 +155,7 @@ export function createStore(initialState = createDefaultState()) {
           return;
         }
 
-        if (fieldDefinition.type === "tags") {
+        if (fieldDefinition.type === "tags" || fieldDefinition.type === "reference-tags") {
           draft.records[moduleKey][recordIndex][fieldKey] = Array.isArray(value) ? value : splitList(value);
           return;
         }
@@ -165,6 +172,11 @@ export function createStore(initialState = createDefaultState()) {
 
         if (fieldDefinition.type === "json") {
           draft.records[moduleKey][recordIndex][fieldKey] = parseJsonObject(value);
+          return;
+        }
+
+        if (fieldDefinition.type === "json-list") {
+          draft.records[moduleKey][recordIndex][fieldKey] = parseJsonList(value);
           return;
         }
 

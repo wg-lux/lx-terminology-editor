@@ -2,6 +2,14 @@ import { parse } from "../vendor/yaml/index.js";
 import { MODULE_MAP } from "../models/module-definitions.js";
 import { normalizeDocumentName } from "../models/validator.js";
 
+const REPORT_TEMPLATE_VALIDATOR_FIELDS = [
+  "examination_validators",
+  "findings_validators",
+  "classification_validators",
+  "intervention_validators",
+  "unit_validators",
+];
+
 function getZipRuntime() {
   const zipRuntime = globalThis.JSZip;
   if (!zipRuntime) {
@@ -12,6 +20,79 @@ function getZipRuntime() {
 
 function createDocumentId(moduleKey, index) {
   return `${moduleKey}-import-${index + 1}`;
+}
+
+function normalizeIdentity(value, fallback) {
+  return (
+    String(value || "")
+      .trim()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9._-]+/gi, "_")
+      .replace(/^[_-]+|[_-]+$/g, "") || fallback
+  );
+}
+
+function listValue(value) {
+  if (!value) {
+    return [];
+  }
+  return Array.isArray(value) ? value.filter(Boolean) : [value].filter(Boolean);
+}
+
+function getGeneratedReportSectionName(reportTemplate) {
+  return `${normalizeIdentity(reportTemplate?.name, "bericht")}_befunde`;
+}
+
+function findingNameFromReportSectionEntry(entry) {
+  if (typeof entry === "string") {
+    return entry;
+  }
+  if (entry && typeof entry === "object" && typeof entry.finding === "string") {
+    return entry.finding;
+  }
+  return "";
+}
+
+function hydrateReportTemplateFindings(state) {
+  const reportTemplates = state.records.lx_report_templates || [];
+  const reportSections = state.records.lx_report_template_sections || [];
+  if (!reportTemplates.length || !reportSections.length) {
+    return;
+  }
+
+  const sectionsByName = new Map(reportSections.map((section) => [section.name, section]));
+  reportTemplates.forEach((template) => {
+    const generatedSectionName = getGeneratedReportSectionName(template);
+    const sectionNames = listValue(template.report_sections).filter((sectionName) => sectionName === generatedSectionName);
+    const reportFindings = sectionNames.flatMap((sectionName) =>
+      listValue(sectionsByName.get(sectionName)?.findings)
+        .map(findingNameFromReportSectionEntry)
+        .filter(Boolean),
+    );
+    if (reportFindings.length) {
+      template.report_findings = [...new Set([...(template.report_findings || []), ...reportFindings])];
+    }
+  });
+}
+
+function expandReportTemplateEditorFields(moduleKey, record) {
+  if (moduleKey !== "lx_report_templates") {
+    return record;
+  }
+
+  const validators =
+    record.validators && typeof record.validators === "object" && !Array.isArray(record.validators) ? record.validators : null;
+  if (!validators) {
+    return record;
+  }
+
+  const expandedRecord = { ...record };
+  REPORT_TEMPLATE_VALIDATOR_FIELDS.forEach((fieldName) => {
+    expandedRecord[fieldName] = listValue(validators[fieldName]);
+  });
+  delete expandedRecord.validators;
+  return expandedRecord;
 }
 
 export async function downloadBundleZip(entries, filename = "terminologiepaket.zip") {
@@ -118,12 +199,14 @@ export async function importBundleZip(file) {
         }
 
         state.records[moduleKey].push({
-          ...record,
+          ...expandReportTemplateEditorFields(moduleKey, record),
           _documentId: documentId,
         });
       });
     });
   });
+
+  hydrateReportTemplateFindings(state);
 
   return state;
 }

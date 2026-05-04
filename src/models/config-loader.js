@@ -1,6 +1,16 @@
 import { MODULE_MAP } from "./module-definitions.js";
 import { RECORD_PASSTHROUGH_KEY, pruneEmpty } from "./validator.js";
 
+const REPORT_TEMPLATE_MODULE_KEY = "lx_report_templates";
+const REPORT_SECTION_MODULE_KEY = "lx_report_template_sections";
+const REPORT_TEMPLATE_VALIDATOR_FIELDS = [
+  "examination_validators",
+  "findings_validators",
+  "classification_validators",
+  "intervention_validators",
+  "unit_validators",
+];
+
 function normalizeBundleIdentity(value, fallback) {
   return (
     String(value || "")
@@ -10,6 +20,62 @@ function normalizeBundleIdentity(value, fallback) {
       .replace(/[^a-z0-9._-]+/gi, "_")
       .replace(/^[_-]+|[_-]+$/g, "") || fallback
   );
+}
+
+function mergeUnique(values = []) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function listValue(value) {
+  if (!value) {
+    return [];
+  }
+  return Array.isArray(value) ? value.filter(Boolean) : [value].filter(Boolean);
+}
+
+function getGeneratedReportSectionName(reportTemplateRecord) {
+  return `${normalizeBundleIdentity(reportTemplateRecord.name, "bericht")}_befunde`;
+}
+
+function buildGeneratedReportSections(state) {
+  return (state.records?.[REPORT_TEMPLATE_MODULE_KEY] || [])
+    .filter((record) => Array.isArray(record.report_findings) && record.report_findings.length && record.name)
+    .map((record, index) => ({
+      model: "report_template_section",
+      name: getGeneratedReportSectionName(record),
+      name_de: `${record.name_de || record.name} Befunde`,
+      name_en: `${record.name_en || record.name} Findings`,
+      description: "Automatisch aus den im Bericht ausgewählten Befunden erzeugt.",
+      position: (index + 1) * 10,
+      types: [],
+      section_kind: "findings",
+      findings: listValue(record.report_findings),
+      fields: [],
+    }));
+}
+
+function stripEditorOnlyFields(moduleDefinition, record) {
+  const result = { ...record };
+  moduleDefinition.fields
+    .filter((fieldDefinition) => fieldDefinition.editorOnly)
+    .forEach((fieldDefinition) => {
+      delete result[fieldDefinition.key];
+    });
+  return result;
+}
+
+function buildReportTemplateValidators(record, passthrough) {
+  const fallbackValidators =
+    passthrough?.validators && typeof passthrough.validators === "object" && !Array.isArray(passthrough.validators)
+      ? passthrough.validators
+      : {};
+
+  const validators = {};
+  REPORT_TEMPLATE_VALIDATOR_FIELDS.forEach((fieldName) => {
+    validators[fieldName] = mergeUnique([...listValue(fallbackValidators[fieldName]), ...listValue(record[fieldName])]);
+  });
+
+  return validators;
 }
 
 export function buildRootConfig(bundle) {
@@ -40,6 +106,8 @@ export function buildFileObjects(state) {
   const fileObjects = {
     "config.yaml": buildRootConfig(state.bundle),
   };
+  const generatedReportSections = buildGeneratedReportSections(state);
+  const generatedReportSectionNames = new Set(generatedReportSections.map((section) => section.name));
 
   state.bundle.modules.forEach((moduleKey) => {
     const moduleDefinition = MODULE_MAP[moduleKey];
@@ -50,22 +118,41 @@ export function buildFileObjects(state) {
     documents.forEach((document) => {
       fileObjects[`${moduleKey}/data/${document.name}`] = state.records[moduleKey]
         .filter((record) => record._documentId === document.id)
+        .filter((record) => moduleKey !== REPORT_SECTION_MODULE_KEY || !generatedReportSectionNames.has(record.name))
         .map((record) => {
           const passthrough =
             record[RECORD_PASSTHROUGH_KEY] && typeof record[RECORD_PASSTHROUGH_KEY] === "object"
               ? record[RECORD_PASSTHROUGH_KEY]
               : {};
+          const exportPassthrough = { ...passthrough };
+          const exportRecord = stripEditorOnlyFields(moduleDefinition, record);
+
+          if (moduleKey === REPORT_TEMPLATE_MODULE_KEY && Array.isArray(record.report_findings) && record.report_findings.length) {
+            exportRecord.report_sections = mergeUnique([
+              getGeneratedReportSectionName(record),
+              ...listValue(exportRecord.report_sections),
+            ]);
+          }
+
+          if (moduleKey === REPORT_TEMPLATE_MODULE_KEY) {
+            delete exportPassthrough.validators;
+            exportRecord.validators = buildReportTemplateValidators(record, passthrough);
+          }
 
           return pruneEmpty({
             model: moduleDefinition.model,
-            ...record,
-            ...passthrough,
+            ...exportRecord,
+            ...exportPassthrough,
             _documentId: undefined,
             [RECORD_PASSTHROUGH_KEY]: undefined,
           });
         });
     });
   });
+
+  if (state.bundle.modules.includes(REPORT_SECTION_MODULE_KEY) && generatedReportSections.length) {
+    fileObjects[`${REPORT_SECTION_MODULE_KEY}/data/generated.yaml`] = generatedReportSections;
+  }
 
   return fileObjects;
 }

@@ -4,7 +4,15 @@ import { createDefaultDocument, createDefaultState, createEmptyRecord } from "./
 export const RECORD_PASSTHROUGH_KEY = "_passthrough";
 const SELECT_OPTION_LABELS = {
   boolean: "Ja/Nein",
+  condition: "Bedingung",
+  exists: "muss vorhanden sein",
+  findings: "Befunde",
+  history: "Anamnese",
+  missing: "muss fehlen",
   numeric: "Zahl",
+  optional: "optional",
+  patient_data: "Patientendaten",
+  required: "erforderlich",
   selection: "Auswahl",
   text: "Text",
 };
@@ -74,6 +82,23 @@ export function parseJsonObject(value) {
   }
 }
 
+export function parseJsonList(value) {
+  if (value === "" || value === null || value === undefined) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
 export function normalizeBundle(candidateBundle = {}) {
   const fallbackBundle = createDefaultState().bundle;
   return {
@@ -100,7 +125,7 @@ export function normalizeRecord(moduleDefinition, candidateRecord = {}) {
 
   moduleDefinition.fields.forEach((fieldDefinition) => {
     const value = candidateRecord[fieldDefinition.key];
-    if (fieldDefinition.type === "tags") {
+    if (fieldDefinition.type === "tags" || fieldDefinition.type === "reference-tags") {
       record[fieldDefinition.key] = Array.isArray(value) ? value.filter(Boolean) : splitList(value);
       return;
     }
@@ -117,6 +142,11 @@ export function normalizeRecord(moduleDefinition, candidateRecord = {}) {
 
     if (fieldDefinition.type === "json") {
       record[fieldDefinition.key] = parseJsonObject(value);
+      return;
+    }
+
+    if (fieldDefinition.type === "json-list") {
+      record[fieldDefinition.key] = parseJsonList(value);
       return;
     }
 
@@ -209,8 +239,9 @@ export function validateRecord(moduleDefinition, record) {
     const value = record[fieldDefinition.key];
 
     if (fieldDefinition.required) {
-      const isEmptyArray = fieldDefinition.type === "tags" && (!Array.isArray(value) || !value.length);
-      const isEmptyString = fieldDefinition.type !== "tags" && !String(value || "").trim();
+      const isListField = fieldDefinition.type === "tags" || fieldDefinition.type === "reference-tags";
+      const isEmptyArray = isListField && (!Array.isArray(value) || !value.length);
+      const isEmptyString = !isListField && !String(value || "").trim();
       if (isEmptyArray || isEmptyString) {
         errors.push(`${fieldDefinition.label} ist erforderlich.`);
       }
@@ -222,6 +253,10 @@ export function validateRecord(moduleDefinition, record) {
 
     if (fieldDefinition.type === "json" && value && (typeof value !== "object" || Array.isArray(value))) {
       errors.push(`${fieldDefinition.label} muss ein JSON-Objekt sein.`);
+    }
+
+    if (fieldDefinition.type === "json-list" && value && !Array.isArray(value)) {
+      errors.push(`${fieldDefinition.label} muss eine JSON-Liste sein.`);
     }
   });
 

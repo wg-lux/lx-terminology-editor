@@ -12,26 +12,34 @@ const FIELD_OPTION_LABELS = {
   anesthesiology: "Anästhesiologie",
   boolean: "Ja/Nein",
   cardiology: "Kardiologie",
+  condition: "Bedingung",
   dermatology: "Dermatologie",
   emergency_medicine: "Notfallmedizin",
   endocrinology: "Endokrinologie",
+  exists: "muss vorhanden sein",
+  findings: "Befunde",
   general_medicine: "Allgemeinmedizin",
   gastroenterology: "Gastroenterologie",
   gynecology: "Gynäkologie",
   hematology: "Hämatologie",
+  history: "Anamnese",
   intensive_care: "Intensivmedizin",
   internal_medicine: "Innere Medizin",
   laboratory_medicine: "Labormedizin",
+  missing: "muss fehlen",
   nephrology: "Nephrologie",
   neurology: "Neurologie",
   oncology: "Onkologie",
+  optional: "optional",
   orthopedics: "Orthopädie",
   otolaryngology: "Hals-Nasen-Ohren-Heilkunde",
   pathology: "Pathologie",
+  patient_data: "Patientendaten",
   pediatrics: "Pädiatrie",
   psychiatry: "Psychiatrie",
   pulmonology: "Pneumologie",
   radiology: "Radiologie",
+  required: "erforderlich",
   rheumatology: "Rheumatologie",
   surgery: "Chirurgie",
   numeric: "Zahl",
@@ -104,6 +112,10 @@ export function mountApp({ store }) {
   let zipImportMode = "open";
   let pendingMergePlan = null;
   let mergeChoices = {};
+
+  function visibleModuleKeys(state) {
+    return state.bundle.modules.filter((moduleKey) => !MODULE_MAP[moduleKey]?.hidden);
+  }
 
   shareButton.addEventListener("click", async () => {
     const shareUrl = buildShareUrl(store.getState());
@@ -276,7 +288,7 @@ export function mountApp({ store }) {
 
   function focusFirstModule() {
     const nextState = store.getState();
-    activeModuleKey = nextState.bundle.modules[0] || "lx_examinations";
+    activeModuleKey = visibleModuleKeys(nextState)[0] || "lx_examinations";
     activePreviewGroupKey = "root";
     activeFilePath = "config.yaml";
   }
@@ -306,8 +318,8 @@ export function mountApp({ store }) {
       const validation = validateBundle(state);
       const previewGroups = buildPreviewGroups(state);
 
-      if (!state.bundle.modules.includes(activeModuleKey)) {
-        activeModuleKey = state.bundle.modules[0] || "lx_examinations";
+      if (!state.bundle.modules.includes(activeModuleKey) || MODULE_MAP[activeModuleKey]?.hidden) {
+        activeModuleKey = visibleModuleKeys(state)[0] || "lx_examinations";
       }
 
       if (!previewGroups.some((group) => group.key === activePreviewGroupKey)) {
@@ -401,32 +413,36 @@ export function mountApp({ store }) {
   function renderModulePickers(state) {
     modulePickers.innerHTML = "";
 
-    Object.values(MODULE_MAP).forEach((moduleDefinition) => {
-      const card = document.createElement("div");
-      card.className = "picker-card";
+    Object.values(MODULE_MAP)
+      .filter((moduleDefinition) => !moduleDefinition.hidden)
+      .forEach((moduleDefinition) => {
+        const card = document.createElement("div");
+        card.className = "picker-card";
 
-      const label = document.createElement("label");
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = state.bundle.modules.includes(moduleDefinition.key);
-      checkbox.addEventListener("change", () => {
-        store.toggleModule(moduleDefinition.key, checkbox.checked);
+        const label = document.createElement("label");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = state.bundle.modules.includes(moduleDefinition.key);
+        checkbox.addEventListener("change", () => {
+          store.toggleModule(moduleDefinition.key, checkbox.checked);
+        });
+
+        label.append(checkbox, document.createTextNode(moduleDefinition.label));
+
+        const description = document.createElement("p");
+        description.textContent = moduleDefinition.description;
+
+        card.append(label, description);
+        modulePickers.append(card);
       });
-
-      label.append(checkbox, document.createTextNode(moduleDefinition.label));
-
-      const description = document.createElement("p");
-      description.textContent = moduleDefinition.description;
-
-      card.append(label, description);
-      modulePickers.append(card);
-    });
   }
 
   function renderModuleTabs(state, validation) {
     moduleTabs.innerHTML = "";
 
-    if (!state.bundle.modules.length) {
+    const visibleKeys = visibleModuleKeys(state);
+
+    if (!visibleKeys.length) {
       const empty = document.createElement("p");
       empty.className = "muted";
       empty.textContent = "Wähle mindestens ein Modul aus, um Datensätze zu bearbeiten.";
@@ -434,7 +450,7 @@ export function mountApp({ store }) {
       return;
     }
 
-    state.bundle.modules.forEach((moduleKey) => {
+    visibleKeys.forEach((moduleKey) => {
       const recordErrorCount = (validation.moduleErrors[moduleKey] || []).reduce(
         (sum, recordErrors) => sum + recordErrors.length,
         0,
@@ -455,7 +471,7 @@ export function mountApp({ store }) {
   function renderModuleEditor(state, validation) {
     moduleEditor.innerHTML = "";
 
-    if (!state.bundle.modules.length) {
+    if (!visibleModuleKeys(state).length) {
       const empty = document.createElement("p");
       empty.className = "muted";
       empty.textContent = "Keine Module ausgewählt.";
@@ -650,7 +666,7 @@ export function mountApp({ store }) {
 
   function createField(fieldDefinition, record, recordErrors, recordIndex, title) {
     const wrapper = document.createElement("div");
-    wrapper.className = `field${["textarea", "tags", "json"].includes(fieldDefinition.type) ? " field-full" : ""}`;
+    wrapper.className = `field${["textarea", "tags", "reference-tags", "json", "json-list"].includes(fieldDefinition.type) ? " field-full" : ""}`;
 
     const label = document.createElement("label");
     label.textContent = fieldDefinition.label;
@@ -669,6 +685,8 @@ export function mountApp({ store }) {
         }
         refreshDerivedViews();
       });
+    } else if (fieldDefinition.type === "reference") {
+      input = createReferenceInput(fieldDefinition, record, recordIndex, title);
     } else if (fieldDefinition.type === "select") {
       input = document.createElement("select");
       fieldDefinition.options.forEach((optionValue) => {
@@ -689,13 +707,20 @@ export function mountApp({ store }) {
         store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.checked);
         refreshDerivedViews();
       });
-    } else if (fieldDefinition.type === "json") {
+    } else if (fieldDefinition.type === "reference-tags") {
+      input = createReferenceTagsInput(fieldDefinition, record, recordIndex);
+    } else if (fieldDefinition.type === "json" || fieldDefinition.type === "json-list") {
       input = document.createElement("textarea");
       input.placeholder = fieldDefinition.placeholder || "";
+      const fieldValue = record[fieldDefinition.key];
       input.value =
-        record[fieldDefinition.key] && typeof record[fieldDefinition.key] === "object"
-          ? JSON.stringify(record[fieldDefinition.key], null, 2)
-          : "";
+        fieldDefinition.type === "json-list"
+          ? Array.isArray(fieldValue)
+            ? JSON.stringify(fieldValue, null, 2)
+            : ""
+          : fieldValue && typeof fieldValue === "object" && !Array.isArray(fieldValue)
+            ? JSON.stringify(fieldValue, null, 2)
+            : "";
       input.addEventListener("input", (event) => {
         store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.value, { emit: false });
         refreshDerivedViews();
@@ -720,8 +745,14 @@ export function mountApp({ store }) {
     let defaultHint = "Optional, sofern der nachgelagerte Validator das Feld nicht verlangt.";
     if (fieldDefinition.type === "tags") {
       defaultHint = "Werte durch Kommas trennen.";
+    } else if (fieldDefinition.type === "reference-tags") {
+      defaultHint = "Einträge aus der Liste auswählen.";
+    } else if (fieldDefinition.type === "reference") {
+      defaultHint = "Eintrag aus der Liste auswählen.";
     } else if (fieldDefinition.type === "json") {
       defaultHint = "JSON-Objekt eingeben.";
+    } else if (fieldDefinition.type === "json-list") {
+      defaultHint = "JSON-Liste eingeben.";
     } else if (fieldDefinition.type === "boolean") {
       defaultHint = "Häkchen setzen, wenn ja.";
     }
@@ -729,6 +760,114 @@ export function mountApp({ store }) {
 
     wrapper.append(input, hint);
     return wrapper;
+  }
+
+  function createReferenceInput(fieldDefinition, record, recordIndex, title) {
+    const select = document.createElement("select");
+    const currentValue = record[fieldDefinition.key] || "";
+    const sourceRecords = (store.getState().records?.[fieldDefinition.sourceModule] || []).filter((sourceRecord) =>
+      String(sourceRecord?.name || "").trim(),
+    );
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = fieldDefinition.placeholder || "Eintrag auswählen";
+    select.append(placeholder);
+
+    const optionValues = new Set();
+    sourceRecords.forEach((sourceRecord) => {
+      optionValues.add(sourceRecord.name);
+      const option = document.createElement("option");
+      option.value = sourceRecord.name;
+      option.textContent =
+        sourceRecord.name_de && sourceRecord.name_de !== sourceRecord.name
+          ? `${sourceRecord.name_de} (${sourceRecord.name})`
+          : sourceRecord.name;
+      select.append(option);
+    });
+
+    if (currentValue && !optionValues.has(currentValue)) {
+      const option = document.createElement("option");
+      option.value = currentValue;
+      option.textContent = currentValue;
+      select.append(option);
+    }
+
+    select.value = currentValue;
+    select.addEventListener("change", (event) => {
+      store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.value);
+      if (fieldDefinition.key === "name") {
+        title.textContent = event.target.value || "Unbenannter Eintrag";
+      }
+    });
+    return select;
+  }
+
+  function createReferenceTagsInput(fieldDefinition, record, recordIndex) {
+    const container = document.createElement("div");
+    container.className = "reference-picker";
+    const selectedValues = Array.isArray(record[fieldDefinition.key]) ? record[fieldDefinition.key] : [];
+    const sourceRecords = (store.getState().records?.[fieldDefinition.sourceModule] || []).filter((sourceRecord) =>
+      String(sourceRecord?.name || "").trim(),
+    );
+
+    const select = document.createElement("select");
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = fieldDefinition.placeholder || "Eintrag auswählen";
+    select.append(placeholder);
+
+    sourceRecords
+      .filter((sourceRecord) => !selectedValues.includes(sourceRecord.name))
+      .forEach((sourceRecord) => {
+        const option = document.createElement("option");
+        option.value = sourceRecord.name;
+        option.textContent =
+          sourceRecord.name_de && sourceRecord.name_de !== sourceRecord.name
+            ? `${sourceRecord.name_de} (${sourceRecord.name})`
+            : sourceRecord.name;
+        select.append(option);
+      });
+
+    select.disabled = sourceRecords.length === 0 || sourceRecords.length === selectedValues.length;
+    select.addEventListener("change", (event) => {
+      const nextValue = event.target.value;
+      if (!nextValue || selectedValues.includes(nextValue)) {
+        return;
+      }
+      store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, [...selectedValues, nextValue]);
+    });
+
+    const chipList = document.createElement("div");
+    chipList.className = "reference-chip-list";
+    if (!selectedValues.length) {
+      const empty = document.createElement("p");
+      empty.className = "reference-empty";
+      empty.textContent = sourceRecords.length ? "Noch keine Befunde ausgewählt." : "Bitte zuerst Befunde anlegen.";
+      chipList.append(empty);
+    }
+
+    selectedValues.forEach((value) => {
+      const sourceRecord = sourceRecords.find((candidate) => candidate.name === value);
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "reference-chip";
+      chip.textContent =
+        sourceRecord?.name_de && sourceRecord.name_de !== value ? `${sourceRecord.name_de} ×` : `${value} ×`;
+      chip.title = `${value} entfernen`;
+      chip.addEventListener("click", () => {
+        store.updateRecordField(
+          activeModuleKey,
+          recordIndex,
+          fieldDefinition.key,
+          selectedValues.filter((selectedValue) => selectedValue !== value),
+        );
+      });
+      chipList.append(chip);
+    });
+
+    container.append(select, chipList);
+    return container;
   }
 
   function renderPreview(state, previewGroups = buildPreviewGroups(state)) {
