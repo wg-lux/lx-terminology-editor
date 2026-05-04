@@ -273,6 +273,11 @@ h1 {
   cursor: pointer;
 }
 
+.reference-chip.readonly {
+  cursor: default;
+  background: rgba(255, 255, 255, 0.74);
+}
+
 .reference-empty {
   margin-bottom: 0;
   color: var(--muted);
