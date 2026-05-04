@@ -65,6 +65,12 @@ export async function importBundleZip(file) {
       name: typeof rootConfig?.name === "string" ? rootConfig.name : "",
       description: typeof rootConfig?.description === "string" ? rootConfig.description : "",
       version: typeof rootConfig?.version === "string" ? rootConfig.version : "",
+      author:
+        typeof rootConfig?.author === "string"
+          ? rootConfig.author
+          : Array.isArray(rootConfig?.authors)
+            ? rootConfig.authors.filter((author) => typeof author === "string" && author.trim()).join(", ")
+            : "",
       medical_field: typeof rootConfig?.medical_field === "string" ? rootConfig.medical_field : "",
       modules: moduleKeys,
     },

@@ -18,6 +18,7 @@ export function buildRootConfig(bundle) {
     description: bundle.description,
     version: normalizeBundleIdentity(bundle.version, "0.1.0"),
     medical_field: normalizeBundleIdentity(bundle.medical_field, "gastroenterology"),
+    author: bundle.author,
     modules: bundle.modules,
   });
 }

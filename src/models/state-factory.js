@@ -33,6 +33,7 @@ export function createDefaultState() {
       description: "Gemeinsames Terminologiepaket für LX-kompatible YAML-Exporte.",
       version: "0.1.0",
       medical_field: "gastroenterology",
+      author: "",
       modules: normalizeSelectedModules(MODULE_DEFINITIONS.map((moduleDefinition) => moduleDefinition.key)),
     },
     documents: {},

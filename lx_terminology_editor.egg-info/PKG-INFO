@@ -41,7 +41,7 @@ Pyodide.
 
 ## Aktueller Umfang
 
-- Bearbeitet Paketmetadaten inklusive Fachbereich und acht Terminologiemodule:
+- Bearbeitet Paketmetadaten inklusive Fachbereich, Autor und acht Terminologiemodule:
   - `lx_examinations`
   - `lx_findings`
   - `lx_indications`

@@ -81,6 +81,7 @@ export function normalizeBundle(candidateBundle = {}) {
     description:
       typeof candidateBundle.description === "string" ? candidateBundle.description : fallbackBundle.description,
     version: typeof candidateBundle.version === "string" ? candidateBundle.version : fallbackBundle.version,
+    author: typeof candidateBundle.author === "string" ? candidateBundle.author : fallbackBundle.author,
     medical_field:
       typeof candidateBundle.medical_field === "string"
         ? candidateBundle.medical_field
