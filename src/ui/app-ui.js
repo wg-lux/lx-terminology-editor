@@ -597,7 +597,7 @@ export function mountApp({ store }) {
 
   function createField(fieldDefinition, record, recordErrors, recordIndex, title) {
     const wrapper = document.createElement("div");
-    wrapper.className = `field${fieldDefinition.type === "textarea" || fieldDefinition.type === "tags" ? " field-full" : ""}`;
+    wrapper.className = `field${["textarea", "tags", "json"].includes(fieldDefinition.type) ? " field-full" : ""}`;
 
     const label = document.createElement("label");
     label.textContent = fieldDefinition.label;
@@ -628,11 +628,31 @@ export function mountApp({ store }) {
       input.addEventListener("change", (event) => {
         store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.value);
       });
+    } else if (fieldDefinition.type === "boolean") {
+      input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = record[fieldDefinition.key] === true;
+      input.addEventListener("change", (event) => {
+        store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.checked);
+        refreshDerivedViews();
+      });
+    } else if (fieldDefinition.type === "json") {
+      input = document.createElement("textarea");
+      input.placeholder = fieldDefinition.placeholder || "";
+      input.value =
+        record[fieldDefinition.key] && typeof record[fieldDefinition.key] === "object"
+          ? JSON.stringify(record[fieldDefinition.key], null, 2)
+          : "";
+      input.addEventListener("input", (event) => {
+        store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.value, { emit: false });
+        refreshDerivedViews();
+      });
     } else {
       input = document.createElement("input");
-      input.type = "text";
+      input.type = fieldDefinition.type === "number" ? "number" : "text";
       input.placeholder = fieldDefinition.placeholder || "";
-      input.value = fieldDefinition.type === "tags" ? (record[fieldDefinition.key] || []).join(", ") : record[fieldDefinition.key] || "";
+      input.value =
+        fieldDefinition.type === "tags" ? (record[fieldDefinition.key] || []).join(", ") : (record[fieldDefinition.key] ?? "");
       input.addEventListener("input", (event) => {
         store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.value, { emit: false });
         if (fieldDefinition.key === "name") {
@@ -644,11 +664,15 @@ export function mountApp({ store }) {
 
     const hint = document.createElement("p");
     hint.className = "field-hint";
-    hint.textContent =
-      recordErrors.find((error) => error.startsWith(fieldDefinition.label)) ||
-      (fieldDefinition.type === "tags"
-        ? "Werte durch Kommas trennen."
-        : "Optional, sofern der nachgelagerte Validator das Feld nicht verlangt.");
+    let defaultHint = "Optional, sofern der nachgelagerte Validator das Feld nicht verlangt.";
+    if (fieldDefinition.type === "tags") {
+      defaultHint = "Werte durch Kommas trennen.";
+    } else if (fieldDefinition.type === "json") {
+      defaultHint = "JSON-Objekt eingeben.";
+    } else if (fieldDefinition.type === "boolean") {
+      defaultHint = "Häkchen setzen, wenn ja.";
+    }
+    hint.textContent = recordErrors.find((error) => error.startsWith(fieldDefinition.label)) || defaultHint;
 
     wrapper.append(input, hint);
     return wrapper;

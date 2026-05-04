@@ -6,5 +6,12 @@ devenv.local.yaml
 # direnv
 .direnv
 
+# Python
+__pycache__/
+*.py[cod]
+
 # pre-commit
 .pre-commit-config.yaml
+
+# local editor publish output
+.published/
