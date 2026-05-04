@@ -140,7 +140,7 @@ export function normalizeRecord(moduleDefinition, candidateRecord = {}) {
       return;
     }
 
-    if (fieldDefinition.type === "json") {
+    if (fieldDefinition.type === "json" || fieldDefinition.type === "validator-rule") {
       record[fieldDefinition.key] = parseJsonObject(value);
       return;
     }
@@ -251,7 +251,11 @@ export function validateRecord(moduleDefinition, record) {
       errors.push(`${fieldDefinition.label} muss einer der folgenden Werte sein: ${formatSelectOptions(fieldDefinition.options)}.`);
     }
 
-    if (fieldDefinition.type === "json" && value && (typeof value !== "object" || Array.isArray(value))) {
+    if (
+      (fieldDefinition.type === "json" || fieldDefinition.type === "validator-rule") &&
+      value &&
+      (typeof value !== "object" || Array.isArray(value))
+    ) {
       errors.push(`${fieldDefinition.label} muss ein JSON-Objekt sein.`);
     }
 

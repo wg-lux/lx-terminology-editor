@@ -1,7 +1,5 @@
 const VALIDATOR_OPERATOR_OPTIONS = ["exists", "missing", "condition"];
 const VALIDATOR_PRECEDENCE_OPTIONS = ["required", "optional"];
-const CONDITION_QUERY_PLACEHOLDER =
-  '{"condition":{"any":[{"classification":"size_mm","comparator":"gt","value":10}],"then_requires":[{"classification":"lst"}]}}';
 
 export const MODULE_DEFINITIONS = [
   {
@@ -365,9 +363,8 @@ export const MODULE_DEFINITIONS = [
       { key: "operator", label: "Prüfart", type: "select", options: VALIDATOR_OPERATOR_OPTIONS },
       {
         key: "query",
-        label: "Bedingung oder Zusatzregel (JSON)",
-        type: "json",
-        placeholder: CONDITION_QUERY_PLACEHOLDER,
+        label: "Regel",
+        type: "validator-rule",
       },
     ],
   },
@@ -399,9 +396,8 @@ export const MODULE_DEFINITIONS = [
       { key: "precedence", label: "Priorität", type: "select", options: VALIDATOR_PRECEDENCE_OPTIONS },
       {
         key: "query",
-        label: "Bedingung oder Zusatzregel (JSON)",
-        type: "json",
-        placeholder: CONDITION_QUERY_PLACEHOLDER,
+        label: "Regel",
+        type: "validator-rule",
       },
     ],
   },
@@ -433,9 +429,8 @@ export const MODULE_DEFINITIONS = [
       { key: "precedence", label: "Priorität", type: "select", options: VALIDATOR_PRECEDENCE_OPTIONS },
       {
         key: "query",
-        label: "Bedingung oder Zusatzregel (JSON)",
-        type: "json",
-        placeholder: CONDITION_QUERY_PLACEHOLDER,
+        label: "Regel",
+        type: "validator-rule",
       },
     ],
   },
@@ -475,9 +470,8 @@ export const MODULE_DEFINITIONS = [
       { key: "precedence", label: "Priorität", type: "select", options: VALIDATOR_PRECEDENCE_OPTIONS },
       {
         key: "query",
-        label: "Bedingung oder Zusatzregel (JSON)",
-        type: "json",
-        placeholder: CONDITION_QUERY_PLACEHOLDER,
+        label: "Regel",
+        type: "validator-rule",
       },
     ],
   },

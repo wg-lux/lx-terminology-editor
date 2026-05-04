@@ -13,6 +13,28 @@ function cloneState(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function buildDefaultConditionQuery(draft, record) {
+  const classification = record.classification || draft.records.lx_classifications?.[0]?.name || "classification";
+  return {
+    condition: {
+      any: [
+        {
+          classification,
+          comparator: "eq",
+          value: true,
+        },
+      ],
+      then_requires: [
+        {
+          kind: "classification",
+          name: classification,
+          required: true,
+        },
+      ],
+    },
+  };
+}
+
 export function createStore(initialState = createDefaultState()) {
   let state = normalizeState(initialState);
   const listeners = new Set();
@@ -170,7 +192,7 @@ export function createStore(initialState = createDefaultState()) {
           return;
         }
 
-        if (fieldDefinition.type === "json") {
+        if (fieldDefinition.type === "json" || fieldDefinition.type === "validator-rule") {
           draft.records[moduleKey][recordIndex][fieldKey] = parseJsonObject(value);
           return;
         }
@@ -181,6 +203,14 @@ export function createStore(initialState = createDefaultState()) {
         }
 
         draft.records[moduleKey][recordIndex][fieldKey] = value;
+        if (fieldKey === "operator") {
+          const record = draft.records[moduleKey][recordIndex];
+          if (value !== "condition" && record.query) {
+            record.query = {};
+          } else if (value === "condition" && !record.query?.condition) {
+            record.query = buildDefaultConditionQuery(draft, record);
+          }
+        }
       }, options);
     },
   };

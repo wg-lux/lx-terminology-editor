@@ -284,6 +284,38 @@ h1 {
   font-size: 0.9rem;
 }
 
+.validator-rule-builder {
+  display: grid;
+  gap: 12px;
+}
+
+.rule-text-block {
+  margin-bottom: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(31, 79, 89, 0.26);
+  border-radius: 12px;
+  background: rgba(31, 79, 89, 0.08);
+  color: var(--secondary);
+  font-weight: 700;
+}
+
+.rule-builder-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.rule-control {
+  margin-bottom: 0;
+}
+
+.rule-control span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .field-hint {
   margin-top: 8px;
   font-size: 0.86rem;

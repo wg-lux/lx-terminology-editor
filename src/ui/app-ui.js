@@ -76,8 +76,33 @@ const MEDICAL_FIELD_OPTIONS = [
   "rheumatology",
 ];
 
+const VALIDATOR_COMPARATOR_OPTIONS = ["eq", "ne", "gt", "gte", "lt", "lte", "in", "not_in"];
+const VALIDATOR_COMPARATOR_LABELS = {
+  eq: "gleich",
+  ne: "nicht gleich",
+  gt: "größer als",
+  gte: "größer oder gleich",
+  lt: "kleiner als",
+  lte: "kleiner als oder gleich",
+  in: "einer von",
+  not_in: "keiner von",
+};
+const REQUIREMENT_KIND_OPTIONS = ["classification", "finding", "intervention", "unit"];
+const REQUIREMENT_KIND_LABELS = {
+  classification: "Klassifikation",
+  finding: "Befund",
+  intervention: "Intervention",
+  unit: "Einheit",
+};
+const REQUIREMENT_SOURCE_MODULES = {
+  classification: "lx_classifications",
+  finding: "lx_findings",
+  intervention: "lx_interventions",
+  unit: "lx_units",
+};
+
 function optionLabel(value) {
-  return FIELD_OPTION_LABELS[value] || value;
+  return FIELD_OPTION_LABELS[value] || VALIDATOR_COMPARATOR_LABELS[value] || REQUIREMENT_KIND_LABELS[value] || value;
 }
 
 export function mountApp({ store }) {
@@ -666,7 +691,7 @@ export function mountApp({ store }) {
 
   function createField(fieldDefinition, record, recordErrors, recordIndex, title) {
     const wrapper = document.createElement("div");
-    wrapper.className = `field${["textarea", "tags", "reference-tags", "json", "json-list"].includes(fieldDefinition.type) ? " field-full" : ""}`;
+    wrapper.className = `field${["textarea", "tags", "reference-tags", "json", "json-list", "validator-rule"].includes(fieldDefinition.type) ? " field-full" : ""}`;
 
     const label = document.createElement("label");
     label.textContent = fieldDefinition.label;
@@ -709,6 +734,8 @@ export function mountApp({ store }) {
       });
     } else if (fieldDefinition.type === "reference-tags") {
       input = createReferenceTagsInput(fieldDefinition, record, recordIndex);
+    } else if (fieldDefinition.type === "validator-rule") {
+      input = createValidatorRuleInput(fieldDefinition, record, recordIndex);
     } else if (fieldDefinition.type === "json" || fieldDefinition.type === "json-list") {
       input = document.createElement("textarea");
       input.placeholder = fieldDefinition.placeholder || "";
@@ -753,6 +780,8 @@ export function mountApp({ store }) {
       defaultHint = "JSON-Objekt eingeben.";
     } else if (fieldDefinition.type === "json-list") {
       defaultHint = "JSON-Liste eingeben.";
+    } else if (fieldDefinition.type === "validator-rule") {
+      defaultHint = "Der Textbaustein wird aus der Regel erzeugt und als lx-data-models-Regel exportiert.";
     } else if (fieldDefinition.type === "boolean") {
       defaultHint = "Häkchen setzen, wenn ja.";
     }
@@ -762,27 +791,31 @@ export function mountApp({ store }) {
     return wrapper;
   }
 
-  function createReferenceInput(fieldDefinition, record, recordIndex, title) {
-    const select = document.createElement("select");
-    const currentValue = record[fieldDefinition.key] || "";
-    const sourceRecords = (store.getState().records?.[fieldDefinition.sourceModule] || []).filter((sourceRecord) =>
-      String(sourceRecord?.name || "").trim(),
-    );
+  function getSourceRecords(moduleKey) {
+    return (store.getState().records?.[moduleKey] || []).filter((sourceRecord) => String(sourceRecord?.name || "").trim());
+  }
 
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = fieldDefinition.placeholder || "Eintrag auswählen";
-    select.append(placeholder);
+  function recordDisplayName(record) {
+    if (!record) {
+      return "";
+    }
+    return record.name_de && record.name_de !== record.name ? `${record.name_de} (${record.name})` : record.name;
+  }
 
+  function displayNameFor(moduleKey, value) {
+    if (!value) {
+      return "";
+    }
+    return recordDisplayName(getSourceRecords(moduleKey).find((sourceRecord) => sourceRecord.name === value)) || value;
+  }
+
+  function appendReferenceOptions(select, moduleKey, currentValue = "") {
     const optionValues = new Set();
-    sourceRecords.forEach((sourceRecord) => {
+    getSourceRecords(moduleKey).forEach((sourceRecord) => {
       optionValues.add(sourceRecord.name);
       const option = document.createElement("option");
       option.value = sourceRecord.name;
-      option.textContent =
-        sourceRecord.name_de && sourceRecord.name_de !== sourceRecord.name
-          ? `${sourceRecord.name_de} (${sourceRecord.name})`
-          : sourceRecord.name;
+      option.textContent = recordDisplayName(sourceRecord);
       select.append(option);
     });
 
@@ -792,6 +825,17 @@ export function mountApp({ store }) {
       option.textContent = currentValue;
       select.append(option);
     }
+  }
+
+  function createReferenceInput(fieldDefinition, record, recordIndex, title) {
+    const select = document.createElement("select");
+    const currentValue = record[fieldDefinition.key] || "";
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = fieldDefinition.placeholder || "Eintrag auswählen";
+    select.append(placeholder);
+    appendReferenceOptions(select, fieldDefinition.sourceModule, currentValue);
 
     select.value = currentValue;
     select.addEventListener("change", (event) => {
@@ -801,6 +845,239 @@ export function mountApp({ store }) {
       }
     });
     return select;
+  }
+
+  function createValidatorRuleInput(fieldDefinition, record, recordIndex) {
+    const container = document.createElement("div");
+    container.className = "validator-rule-builder";
+    const query = record[fieldDefinition.key] && typeof record[fieldDefinition.key] === "object" ? record[fieldDefinition.key] : {};
+    const ruleText = document.createElement("p");
+    ruleText.className = "rule-text-block";
+    ruleText.textContent = buildValidatorRuleText(record, query);
+    container.append(ruleText);
+
+    if (record.operator !== "condition") {
+      return container;
+    }
+
+    const clause = getFirstConditionClause(query);
+    const requirement = getFirstRequirementReference(query);
+    const controls = document.createElement("div");
+    controls.className = "rule-builder-grid";
+
+    const conditionClassification = createRuleSelect(
+      "Wenn Klassifikation",
+      "Klassifikation auswählen",
+      clause.classification || "",
+      (select) => appendReferenceOptions(select, "lx_classifications", clause.classification || ""),
+    );
+    const comparator = createRuleSelect("Vergleich", "Vergleich auswählen", clause.comparator || "eq", (select) => {
+      VALIDATOR_COMPARATOR_OPTIONS.forEach((optionValue) => {
+        const option = document.createElement("option");
+        option.value = optionValue;
+        option.textContent = optionLabel(optionValue);
+        select.append(option);
+      });
+    });
+    const valueInput = createRuleTextInput("Wert", getClauseValueText(clause));
+    const requirementKind = createRuleSelect("Dann erforderlich", "Art auswählen", requirement.kind || "classification", (select) => {
+      REQUIREMENT_KIND_OPTIONS.forEach((optionValue) => {
+        const option = document.createElement("option");
+        option.value = optionValue;
+        option.textContent = optionLabel(optionValue);
+        select.append(option);
+      });
+    });
+    const requirementSourceModule = REQUIREMENT_SOURCE_MODULES[requirementKind.input.value] || "lx_classifications";
+    const requirementName = createRuleSelect(
+      "Eintrag",
+      "Eintrag auswählen",
+      requirement.name || "",
+      (select) => appendReferenceOptions(select, requirementSourceModule, requirement.name || ""),
+    );
+
+    controls.append(conditionClassification.wrapper, comparator.wrapper, valueInput.wrapper, requirementKind.wrapper, requirementName.wrapper);
+
+    let requirementClassification = null;
+    if (requirementKind.input.value === "unit") {
+      requirementClassification = createRuleSelect(
+        "Für Klassifikation",
+        "Klassifikation auswählen",
+        requirement.classification || record.classification || "",
+        (select) => appendReferenceOptions(select, "lx_classifications", requirement.classification || record.classification || ""),
+      );
+      controls.append(requirementClassification.wrapper);
+    }
+
+    const writeQuery = () => {
+      store.updateRecordField(
+        activeModuleKey,
+        recordIndex,
+        fieldDefinition.key,
+        buildConditionQuery({
+          classification: conditionClassification.input.value,
+          comparator: comparator.input.value,
+          valueText: valueInput.input.value,
+          requirementKind: requirementKind.input.value,
+          requirementName: requirementName.input.value,
+          requirementClassification: requirementClassification?.input.value || record.classification || "",
+        }),
+      );
+    };
+
+    [conditionClassification.input, comparator.input, requirementKind.input, requirementName.input].forEach((input) => {
+      input.addEventListener("change", writeQuery);
+    });
+    if (requirementClassification) {
+      requirementClassification.input.addEventListener("change", writeQuery);
+    }
+    valueInput.input.addEventListener("change", writeQuery);
+
+    container.append(controls);
+    return container;
+  }
+
+  function createRuleSelect(labelText, placeholderText, currentValue, appendOptions) {
+    const wrapper = document.createElement("label");
+    wrapper.className = "rule-control";
+    const text = document.createElement("span");
+    text.textContent = labelText;
+    const input = document.createElement("select");
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = placeholderText;
+    input.append(placeholder);
+    appendOptions(input);
+    input.value = currentValue || "";
+    wrapper.append(text, input);
+    return { wrapper, input };
+  }
+
+  function createRuleTextInput(labelText, currentValue) {
+    const wrapper = document.createElement("label");
+    wrapper.className = "rule-control";
+    const text = document.createElement("span");
+    text.textContent = labelText;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = currentValue;
+    input.placeholder = "z.B. 10 oder klein, mittel, groß";
+    wrapper.append(text, input);
+    return { wrapper, input };
+  }
+
+  function getFirstConditionClause(query) {
+    const condition = query?.condition && typeof query.condition === "object" ? query.condition : {};
+    const clauses = Array.isArray(condition.any) && condition.any.length ? condition.any : condition.all || [];
+    return clauses[0] && typeof clauses[0] === "object" ? clauses[0] : {};
+  }
+
+  function getFirstRequirementReference(query) {
+    const condition = query?.condition && typeof query.condition === "object" ? query.condition : {};
+    const requirements = Array.isArray(condition.then_requires) ? condition.then_requires : [];
+    const requirement = requirements[0] && typeof requirements[0] === "object" ? requirements[0] : {};
+    const legacyKind = REQUIREMENT_KIND_OPTIONS.find((kind) => requirement[kind]);
+    return {
+      kind: requirement.kind || legacyKind || "classification",
+      name: requirement.name || (legacyKind ? requirement[legacyKind] : "") || "",
+      classification: requirement.classification || "",
+    };
+  }
+
+  function getClauseValueText(clause) {
+    if (Array.isArray(clause.values)) {
+      return clause.values.join(", ");
+    }
+    return clause.value === undefined || clause.value === null ? "" : String(clause.value);
+  }
+
+  function coerceRuleValue(value) {
+    const trimmed = String(value || "").trim();
+    if (trimmed === "") {
+      return "";
+    }
+    const numericValue = Number(trimmed);
+    return Number.isFinite(numericValue) && /^-?\d+(\.\d+)?$/.test(trimmed) ? numericValue : trimmed;
+  }
+
+  function buildConditionQuery({
+    classification,
+    comparator,
+    valueText,
+    requirementKind,
+    requirementName,
+    requirementClassification,
+  }) {
+    const clause = {
+      classification,
+      comparator: comparator || "eq",
+    };
+    if (["in", "not_in"].includes(clause.comparator)) {
+      clause.values = splitRuleValueList(valueText);
+    } else {
+      clause.value = coerceRuleValue(valueText);
+    }
+
+    const requirement = {
+      kind: requirementKind || "classification",
+      name: requirementName,
+      required: true,
+    };
+    if (requirement.kind === "unit" && requirementClassification) {
+      requirement.classification = requirementClassification;
+    }
+
+    return {
+      condition: {
+        any: [clause],
+        then_requires: [requirement],
+      },
+    };
+  }
+
+  function splitRuleValueList(valueText) {
+    return String(valueText || "")
+      .split(",")
+      .map((value) => coerceRuleValue(value))
+      .filter((value) => value !== "");
+  }
+
+  function buildValidatorRuleText(record, query) {
+    if (record.operator !== "condition") {
+      return buildSimpleValidatorText(record);
+    }
+
+    const clause = getFirstConditionClause(query);
+    const requirement = getFirstRequirementReference(query);
+    const classification = displayNameFor("lx_classifications", clause.classification) || "[Klassifikation]";
+    const comparator = optionLabel(clause.comparator || "eq");
+    const value = getClauseValueText(clause) || "[Wert]";
+    const requirementSourceModule = REQUIREMENT_SOURCE_MODULES[requirement.kind] || "lx_classifications";
+    const requirementName = displayNameFor(requirementSourceModule, requirement.name) || "[Eintrag]";
+    const requirementKind = optionLabel(requirement.kind || "classification");
+    return `Wenn ${classification} ${comparator} ${value} ist, dann muss ${requirementKind} ${requirementName} angegeben werden.`;
+  }
+
+  function buildSimpleValidatorText(record) {
+    const finding = displayNameFor("lx_findings", record.finding) || "[Befund]";
+    const moduleModel = MODULE_MAP[activeModuleKey]?.model;
+    const presencePhrase = (label) =>
+      record.operator === "missing" ? `darf ${label} nicht angegeben sein` : `muss ${label} angegeben sein`;
+
+    if (moduleModel === "classification_validator") {
+      const classification = displayNameFor("lx_classifications", record.classification) || "[Klassifikation]";
+      return `Beim Befund ${finding} ${presencePhrase(`die Klassifikation ${classification}`)}.`;
+    }
+    if (moduleModel === "intervention_validator") {
+      const intervention = displayNameFor("lx_interventions", record.intervention) || "[Intervention]";
+      return `Beim Befund ${finding} ${presencePhrase(`die Intervention ${intervention}`)}.`;
+    }
+    if (moduleModel === "unit_validator") {
+      const classification = displayNameFor("lx_classifications", record.classification) || "[Klassifikation]";
+      const unit = displayNameFor("lx_units", record.unit) || "[Einheit]";
+      return `Beim Befund ${finding} ${presencePhrase(`die Einheit ${unit} für ${classification}`)}.`;
+    }
+    return `Der Befund ${finding} ${record.operator === "missing" ? "muss fehlen" : "muss vorhanden sein"}.`;
   }
 
   function createReferenceTagsInput(fieldDefinition, record, recordIndex) {

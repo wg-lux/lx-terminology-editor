@@ -15,7 +15,7 @@ export function createEmptyRecord(moduleDefinition) {
       record[fieldDefinition.key] = "";
     } else if (fieldDefinition.type === "boolean") {
       record[fieldDefinition.key] = false;
-    } else if (fieldDefinition.type === "json") {
+    } else if (fieldDefinition.type === "json" || fieldDefinition.type === "validator-rule") {
       record[fieldDefinition.key] = {};
     } else if (fieldDefinition.type === "json-list") {
       record[fieldDefinition.key] = [];
