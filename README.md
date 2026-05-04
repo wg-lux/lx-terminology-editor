@@ -1,19 +1,20 @@
 # LX Terminology Editor
 
-Static frontend for creating and sharing LX-style terminology YAML bundles.
+Statisches Frontend zum Erstellen, Zusammenführen und Teilen von
+LX-kompatiblen Terminologiepaketen im YAML-Format.
 
-## Structure
+## Struktur
 
-- `src/models/`: terminology module definitions, config loading, normalization, validation
-- `src/utils/`: YAML serialization, URL sharing, downloads, local persistence
-- `src/store.js`: central state container with subscription and mutation helpers
-- `src/ui/`: DOM rendering and event wiring
-- `src/main.js`: browser entry point
+- `src/models/`: Moduldefinitionen, Konfigurationsaufbau, Normalisierung und Validierung
+- `src/utils/`: YAML-Ausgabe, ZIP-Import und -Export, Zusammenführung, Freigabelinks und lokale Speicherung
+- `src/store.js`: zentraler Arbeitsstand mit Änderungsbenachrichtigungen
+- `src/ui/`: Oberfläche und Interaktionen
+- `src/py/`: Python-Prüflogik für den Browser, geladen über Pyodide
+- `src/main.js`: Einstiegspunkt für den Browser
 
-## Run
+## Starten
 
-Für die UI alleine reicht ein statischer Server. Für den eingebauten `ok`-Lint-Knopf
-verwende den lokalen Python-Server aus diesem Repo:
+Für die ZIP-Funktionen reicht ein kleiner statischer Server:
 
 ```bash
 python3 server.py
@@ -21,9 +22,17 @@ python3 server.py
 
 Dann `http://localhost:4173` öffnen.
 
-## Current scope
+Der Editor benötigt keine Zugangsdaten. ZIP-Dateien werden direkt im Browser
+geöffnet, zusammengeführt und wieder erzeugt.
+Exportierte ZIP-Dateien enthalten ein `lx-data-models`-kompatibles
+Knowledge-Base-Verzeichnis und können über die Terminologie-Importfunktion in
+`lx-annotate` registriert werden.
+Die Paketprüfung läuft ebenfalls im Browser und lädt dafür beim ersten Prüfen
+Pyodide.
 
-- Edits bundle metadata and six terminology modules:
+## Aktueller Umfang
+
+- Bearbeitet Paketmetadaten inklusive Fachbereich und sieben Terminologiemodule:
   - `lx_examinations`
   - `lx_findings`
   - `lx_interventions`
@@ -31,18 +40,18 @@ Dann `http://localhost:4173` öffnen.
   - `lx_classification_choices`
   - `lx_units`
   - `lx_descriptors`
-- Generates:
-  - root `config.yaml`
-  - per-module `config.yaml`
-  - per-module `data/*.yaml`
-- Persists state in `localStorage`
-- Encodes shareable state in the URL hash
-- Downloads generated YAML files individually
-- Exports and imports complete terminology bundles as `.zip`
-- Führt `ok`/`scripts/lint_kb_yaml.py` über einen lokalen API-Endpoint gegen das aktuelle Bundle aus
+- Erzeugt:
+  - Basis-`config.yaml`
+  - `config.yaml` pro Modul
+  - `data/*.yaml` pro Modul
+- Speichert den Arbeitsstand in `localStorage`
+- Erstellt teilbare Freigabelinks über den URL-Hash
+- Lädt erzeugte YAML-Dateien einzeln herunter
+- Exportiert und importiert komplette Terminologiepakete als `.zip`
+- Führt ein weiteres `.zip`-Paket mit dem aktuellen Entwurf zusammen und zeigt Entscheidungen auf Datensatzebene
+- Führt die YAML-Paketprüfung im Browser über Pyodide aus
 
-## Notes
+## Hinweise
 
-Der Lint-Button schreibt das aktuelle Bundle temporär und ruft dann den
-Knowledge-Base-Linter in `lx-data-models` auf. Das ersetzt noch keine
-schema-basierte Validierung direkt im Browser.
+Die App arbeitet vollständig im Browser. Der Python-Server in diesem Repo dient
+nur dazu, die statischen Dateien lokal bereitzustellen.

@@ -1,4 +1,4 @@
-import { parse } from "../../node_modules/yaml/browser/index.js";
+import { parse } from "../vendor/yaml/index.js";
 import { MODULE_MAP } from "../models/module-definitions.js";
 import { normalizeDocumentName } from "../models/validator.js";
 
@@ -14,10 +14,10 @@ function createDocumentId(moduleKey, index) {
   return `${moduleKey}-import-${index + 1}`;
 }
 
-export async function downloadBundleZip(entries, filename = "terminology-bundle.zip") {
+export async function downloadBundleZip(entries, filename = "terminologiepaket.zip") {
   const JSZip = getZipRuntime();
   const zip = new JSZip();
-  const rootFolderName = filename.replace(/\.zip$/i, "") || "terminology-bundle";
+  const rootFolderName = filename.replace(/\.zip$/i, "") || "terminologiepaket";
   Object.entries(entries).forEach(([path, content]) => {
     zip.file(`${rootFolderName}/${path}`, content);
   });
@@ -52,7 +52,7 @@ export async function importBundleZip(file) {
   const normalizedFileMap = normalizeZipRoot(fileMap);
 
   if (!normalizedFileMap["config.yaml"]) {
-    throw new Error("Die ZIP-Datei enthält keine root config.yaml.");
+    throw new Error("Die ZIP-Datei enthält keine Basis-config.yaml.");
   }
 
   const rootConfig = parseYamlFile(normalizedFileMap["config.yaml"], "config.yaml");
@@ -65,6 +65,7 @@ export async function importBundleZip(file) {
       name: typeof rootConfig?.name === "string" ? rootConfig.name : "",
       description: typeof rootConfig?.description === "string" ? rootConfig.description : "",
       version: typeof rootConfig?.version === "string" ? rootConfig.version : "",
+      medical_field: typeof rootConfig?.medical_field === "string" ? rootConfig.medical_field : "",
       modules: moduleKeys,
     },
     documents: {},
@@ -125,7 +126,7 @@ function parseYamlFile(source, path) {
   try {
     return parse(source);
   } catch (error) {
-    throw new Error(`Konnte ${path} nicht lesen: ${error.message}`);
+    throw new Error(`Konnte ${path} nicht lesen. Bitte die YAML-Syntax prüfen.`);
   }
 }
 

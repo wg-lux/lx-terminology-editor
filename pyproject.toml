@@ -8,16 +8,56 @@ version = "0.1.0"
 description = "Local server and tooling for the LX terminology editor frontend."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
   { name = "LX Terminology Editor" },
 ]
-dependencies = [
-  "PyYAML>=6,<7",
-]
+dependencies = []
 
 [project.scripts]
-lx-terminology-editor-server = "server:main"
+lx-terminology-editor-server = "lx_terminology_editor.server:main"
 
 [tool.setuptools]
+packages = ["lx_terminology_editor"]
 py-modules = ["server"]
+
+[tool.setuptools.data-files]
+"share/lx-terminology-editor" = [
+  "index.html",
+  "styles.css",
+]
+"share/lx-terminology-editor/src" = [
+  "src/main.js",
+  "src/store.js",
+]
+"share/lx-terminology-editor/src/models" = [
+  "src/models/config-loader.js",
+  "src/models/module-definitions.js",
+  "src/models/state-factory.js",
+  "src/models/validator.js",
+]
+"share/lx-terminology-editor/src/ui" = [
+  "src/ui/app-ui.js",
+]
+"share/lx-terminology-editor/src/py" = [
+  "src/py/browser_kb_yaml_lint.py",
+]
+"share/lx-terminology-editor/src/utils" = [
+  "src/utils/download.js",
+  "src/utils/merge-bundle.js",
+  "src/utils/persistence.js",
+  "src/utils/pyodide-lint.js",
+  "src/utils/url-hash.js",
+  "src/utils/yaml-helper.js",
+  "src/utils/zip-bundle.js",
+]
+"share/lx-terminology-editor/src/vendor/jszip" = [
+  "src/vendor/jszip/jszip.min.js",
+]
+"share/lx-terminology-editor/src/vendor/yaml" = [
+  "src/vendor/yaml/index.js",
+  "src/vendor/yaml/package.json",
+]
+"share/lx-terminology-editor/src/vendor/yaml/dist" = [
+  "src/vendor/yaml/dist/**/*.js",
+]

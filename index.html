@@ -15,7 +15,8 @@
           <p class="hero-copy">
             Dieser Editor orientiert sich an der dokumentierten Modulstruktur in
             <code>lx-data-models/lx_dtypes/data/</code> und exportiert ein
-            teilbares Terminologie-Bundle mit Modulkonfigurationen und Datendateien.
+            teilbares Terminologiepaket. Pakete können lokal als ZIP geöffnet,
+            zusammengeführt und wieder heruntergeladen werden.
           </p>
         </div>
         <div class="hero-actions">
@@ -23,19 +24,22 @@
           <button id="share-button" class="primary-button" type="button">Freigabelink kopieren</button>
           <button id="download-button" class="secondary-button" type="button">YAML-Dateien herunterladen</button>
           <button id="zip-download-button" class="secondary-button" type="button">ZIP herunterladen</button>
-          <button id="zip-import-button" class="ghost-button" type="button">ZIP importieren</button>
-          <button data-action="lint" class="secondary-button" type="button">Mit ok prüfen</button>
+          <button id="zip-open-button" class="ghost-button" type="button">ZIP öffnen</button>
+          <button id="zip-merge-button" class="primary-button" type="button">ZIP zusammenführen</button>
+          <button data-action="lint" class="secondary-button" type="button">Paket prüfen</button>
         </div>
       </header>
+
+      <section id="merge-panel" class="panel merge-panel" hidden></section>
 
       <main class="layout">
         <section class="panel">
           <div class="panel-header">
             <div>
-              <p class="section-kicker">Bundle</p>
+              <p class="section-kicker">Paket</p>
               <h2>Paket-Einstellungen</h2>
             </div>
-            <p class="muted">Root-<code>config.yaml</code> plus ausgewählte Modulverzeichnisse.</p>
+            <p class="muted">Basis-<code>config.yaml</code> plus ausgewählte Modulverzeichnisse.</p>
           </div>
 
           <div class="form-grid" id="bundle-form"></div>
@@ -71,15 +75,13 @@
           <div class="lint-panel">
             <div class="panel-header panel-header-inline">
               <div>
-                <p class="section-kicker">Lint</p>
-                <h2>Ausgabe in Ordnung?
-                </h2>
-                <button data-action="lint" class="secondary-button" type="button">Mit ok prüfen</button>
-
+                <p class="section-kicker">Prüfung</p>
+                <h2>Paketprüfung</h2>
+                <button data-action="lint" class="secondary-button" type="button">Paket prüfen</button>
               </div>
-              <p class="muted" id="lint-status">Noch nicht ausgeführt.</p>
+              <p class="muted lint-status" id="lint-status">Noch nicht geprüft.</p>
             </div>
-            <pre class="preview-code lint-code"><code id="lint-output">Noch keine Lint-Ausgabe.</code></pre>
+            <pre class="preview-code lint-code"><code id="lint-output">Noch keine Prüfausgabe.</code></pre>
           </div>
         </section>
       </main>
@@ -102,7 +104,7 @@
     </template>
 
     <input id="zip-import-input" type="file" accept=".zip,application/zip" hidden>
-    <script src="./node_modules/jszip/dist/jszip.min.js"></script>
+    <script src="./src/vendor/jszip/jszip.min.js"></script>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>

@@ -28,7 +28,7 @@ export function readSharedState(hashPrefix = "#bundle=") {
   try {
     return decodeState(hash.slice(hashPrefix.length));
   } catch (error) {
-    console.error("Failed to decode shared bundle.", error);
+    console.error("Freigabelink konnte nicht gelesen werden.", error);
     return null;
   }
 }

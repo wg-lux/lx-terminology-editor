@@ -1,2 +1,2 @@
 [console_scripts]
-lx-terminology-editor-server = server:main
+lx-terminology-editor-server = lx_terminology_editor.server:main

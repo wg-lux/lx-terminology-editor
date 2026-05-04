@@ -2,10 +2,23 @@ import { buildFileObjects, buildPreviewGroups } from "../models/config-loader.js
 import { MODULE_MAP } from "../models/module-definitions.js";
 import { validateBundle } from "../models/validator.js";
 import { downloadTextEntries } from "../utils/download.js";
-import { runLint } from "../utils/lint-api.js";
+import { applyMergePlan, createMergePlan, formatMergeValue } from "../utils/merge-bundle.js";
+import { runPyodideLint } from "../utils/pyodide-lint.js";
 import { downloadBundleZip, importBundleZip } from "../utils/zip-bundle.js";
 import { buildShareUrl } from "../utils/url-hash.js";
 import { stringifyYaml } from "../utils/yaml-helper.js";
+
+const FIELD_OPTION_LABELS = {
+  boolean: "Ja/Nein",
+  gastroenterology: "Gastroenterologie",
+  numeric: "Zahl",
+  selection: "Auswahl",
+  text: "Text",
+};
+
+function optionLabel(value) {
+  return FIELD_OPTION_LABELS[value] || value;
+}
 
 export function mountApp({ store }) {
   const bundleForm = document.querySelector("#bundle-form");
@@ -17,8 +30,10 @@ export function mountApp({ store }) {
   const shareButton = document.querySelector("#share-button");
   const downloadButton = document.querySelector("#download-button");
   const zipDownloadButton = document.querySelector("#zip-download-button");
-  const zipImportButton = document.querySelector("#zip-import-button");
+  const zipOpenButton = document.querySelector("#zip-open-button");
+  const zipMergeButton = document.querySelector("#zip-merge-button");
   const zipImportInput = document.querySelector("#zip-import-input");
+  const mergePanel = document.querySelector("#merge-panel");
   const lintButtons = document.querySelectorAll('[data-action="lint"]');
   const resetButton = document.querySelector("#reset-button");
   const cardTemplate = document.querySelector("#record-card-template");
@@ -31,9 +46,12 @@ export function mountApp({ store }) {
   const activeDocumentIds = {};
   let lintState = {
     status: "idle",
-    summary: "Noch nicht ausgeführt.",
-    output: "Noch keine Lint-Ausgabe.",
+    summary: "Noch nicht geprüft.",
+    output: "Noch keine Prüfausgabe.",
   };
+  let zipImportMode = "open";
+  let pendingMergePlan = null;
+  let mergeChoices = {};
 
   shareButton.addEventListener("click", async () => {
     const shareUrl = buildShareUrl(store.getState());
@@ -57,7 +75,7 @@ export function mountApp({ store }) {
   zipDownloadButton.addEventListener("click", async () => {
     try {
       const state = store.getState();
-      const bundleName = (state.bundle.name || "terminology-bundle").trim() || "terminology-bundle";
+      const bundleName = (state.bundle.name || "terminologiepaket").trim() || "terminologiepaket";
       await downloadBundleZip(buildSerializedFiles(state), `${bundleName}.zip`);
       showToast("ZIP-Datei heruntergeladen.");
     } catch (error) {
@@ -66,7 +84,14 @@ export function mountApp({ store }) {
     }
   });
 
-  zipImportButton.addEventListener("click", () => {
+  zipOpenButton.addEventListener("click", () => {
+    zipImportMode = "open";
+    zipImportInput.value = "";
+    zipImportInput.click();
+  });
+
+  zipMergeButton.addEventListener("click", () => {
+    zipImportMode = "merge";
     zipImportInput.value = "";
     zipImportInput.click();
   });
@@ -79,12 +104,11 @@ export function mountApp({ store }) {
 
     try {
       const importedState = await importBundleZip(file);
-      store.replaceState(importedState);
-      const nextState = store.getState();
-      activeModuleKey = nextState.bundle.modules[0] || "lx_examinations";
-      activePreviewGroupKey = "root";
-      activeFilePath = "config.yaml";
-      showToast("ZIP-Bundle importiert.");
+      if (zipImportMode === "merge") {
+        startMerge(importedState);
+      } else {
+        openImportedState(importedState);
+      }
     } catch (error) {
       console.error(error);
       showToast(error.message || "ZIP-Import fehlgeschlagen.");
@@ -95,26 +119,29 @@ export function mountApp({ store }) {
     lintButton.addEventListener("click", async () => {
       lintState = {
         status: "running",
-        summary: "Lint läuft...",
-        output: "Führe ok gegen das aktuelle Bundle aus...",
+        summary: "Prüfung wird vorbereitet...",
+        output: "Lade Python-Prüfumgebung im Browser. Das kann beim ersten Mal kurz dauern.",
       };
       render(store.getState());
 
       try {
-        const result = await runLint(store.getState());
+        const result = await runPyodideLint(buildSerializedFiles(store.getState()));
         lintState = {
           status: result.ok ? "ok" : "error",
-          summary: result.summary_text,
+          summary: result.summary_text || "Prüfung abgeschlossen.",
           output: result.output || "Keine Ausgabe.",
         };
-        showToast(result.ok ? "Lint erfolgreich." : "Lint mit Fehlern beendet.");
+        showToast(result.ok ? "Prüfung erfolgreich." : "Prüfung mit Hinweisen beendet.");
       } catch (error) {
         lintState = {
           status: "error",
-          summary: "Lint-Aufruf fehlgeschlagen.",
-          output: error.payload?.output || error.message || "Unbekannter Fehler.",
+          summary: "Prüfung fehlgeschlagen.",
+          output:
+            error.message ||
+            "Die Python-Prüfumgebung konnte nicht gestartet werden. Prüfe die Internetverbindung und lade die Seite neu.",
         };
-        showToast("Lint-Aufruf fehlgeschlagen.");
+        console.error(error);
+        showToast("Prüfung fehlgeschlagen.");
       }
 
       render(store.getState());
@@ -122,14 +149,99 @@ export function mountApp({ store }) {
   });
 
   resetButton.addEventListener("click", () => {
+    pendingMergePlan = null;
+    mergeChoices = {};
     store.reset();
-    activeModuleKey = store.getState().bundle.modules[0] || "lx_examinations";
-    activeFilePath = "config.yaml";
-    showToast("Beispiel-Bundle wiederhergestellt.");
+    focusFirstModule();
+    render(store.getState());
+    showToast("Beispielpaket wiederhergestellt.");
   });
 
   store.subscribe(render);
   render(store.getState());
+
+  function openImportedState(importedState) {
+    const confirmed = window.confirm("Dieses ZIP öffnet ein neues Paket und ersetzt den aktuellen Arbeitsstand.");
+    if (!confirmed) {
+      return;
+    }
+    pendingMergePlan = null;
+    mergeChoices = {};
+    store.replaceState(importedState);
+    focusFirstModule();
+    render(store.getState());
+    showToast("ZIP-Paket geöffnet.");
+  }
+
+  function startMerge(importedState) {
+    const plan = createMergePlan(store.getState(), importedState);
+    if (!plan.additions.length && !plan.conflicts.length && !plan.modulesAdded.length) {
+      pendingMergePlan = null;
+      mergeChoices = {};
+      renderMergePanel();
+      showToast("Keine Unterschiede gefunden.");
+      return;
+    }
+
+    if (!plan.conflicts.length) {
+      pendingMergePlan = null;
+      mergeChoices = {};
+      store.replaceState(applyMergePlan(plan, {}));
+      focusFirstModule();
+      render(store.getState());
+      showToast(buildMergeSummary(plan, 0));
+      return;
+    }
+
+    pendingMergePlan = plan;
+    mergeChoices = Object.fromEntries(plan.conflicts.map((conflict) => [conflict.id, "current"]));
+    renderMergePanel();
+    mergePanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+    showToast("Bitte Unterschiede prüfen.");
+  }
+
+  function applyPendingMerge() {
+    if (!pendingMergePlan) {
+      return;
+    }
+    const mergedState = applyMergePlan(pendingMergePlan, mergeChoices);
+    const appliedIncoming = pendingMergePlan.conflicts.filter((conflict) => mergeChoices[conflict.id] === "incoming").length;
+    const summaryText = buildMergeSummary(pendingMergePlan, appliedIncoming);
+    pendingMergePlan = null;
+    mergeChoices = {};
+    store.replaceState(mergedState);
+    focusFirstModule();
+    render(store.getState());
+    showToast(summaryText);
+  }
+
+  function cancelPendingMerge() {
+    pendingMergePlan = null;
+    mergeChoices = {};
+    renderMergePanel();
+    showToast("Zusammenführung abgebrochen.");
+  }
+
+  function focusFirstModule() {
+    const nextState = store.getState();
+    activeModuleKey = nextState.bundle.modules[0] || "lx_examinations";
+    activePreviewGroupKey = "root";
+    activeFilePath = "config.yaml";
+  }
+
+  function buildMergeSummary(plan, importedConflictCount) {
+    const parts = [];
+    if (plan.additions.length) {
+      parts.push(`${plan.additions.length} neue Einträge`);
+    }
+    if (importedConflictCount) {
+      parts.push(`${importedConflictCount} importierte Versionen`);
+    }
+    if (plan.modulesAdded.length) {
+      parts.push(`${plan.modulesAdded.length} neue Module`);
+    }
+    return parts.length ? `${parts.join(", ")} übernommen.` : "Zusammenführung abgeschlossen.";
+  }
 
   function refreshDerivedViews() {
     const state = store.getState();
@@ -156,8 +268,9 @@ export function mountApp({ store }) {
       renderModuleEditor(state, validation);
       renderPreview(state, previewGroups);
       renderLintPanel();
+      renderMergePanel();
     } catch (error) {
-      console.error("UI render failed", error);
+      console.error("UI konnte nicht gerendert werden", error);
       moduleEditor.innerHTML = "";
       fileTabs.innerHTML = "";
       filePreview.textContent = `UI-Fehler: ${error?.message || error}`;
@@ -176,8 +289,15 @@ export function mountApp({ store }) {
 
   function renderBundleForm(state, validation) {
     const fields = [
-      { key: "name", label: "Bundle-Name", type: "text", hint: "Wird in das Feld `name` der root config.yaml geschrieben." },
+      { key: "name", label: "Paketname", type: "text", hint: "Wird in das Feld `name` der Basis-config.yaml geschrieben." },
       { key: "version", label: "Version", type: "text", hint: "Semantische Version empfohlen." },
+      {
+        key: "medical_field",
+        label: "Fachbereich",
+        type: "select",
+        hint: "Wird als medizinischer Fachbereich in der Basis-config.yaml gespeichert.",
+        options: ["gastroenterology"],
+      },
       { key: "description", label: "Beschreibung", type: "textarea", hint: "Optionale Paketbeschreibung.", full: true },
     ];
 
@@ -190,23 +310,35 @@ export function mountApp({ store }) {
       const label = document.createElement("label");
       label.textContent = fieldDefinition.label;
 
-      const input =
-        fieldDefinition.type === "textarea" ? document.createElement("textarea") : document.createElement("input");
-      if (fieldDefinition.type !== "textarea") {
+      let input;
+      if (fieldDefinition.type === "textarea") {
+        input = document.createElement("textarea");
+      } else if (fieldDefinition.type === "select") {
+        input = document.createElement("select");
+        const currentValue = state.bundle[fieldDefinition.key] || "";
+        const optionValues = [...fieldDefinition.options];
+        if (currentValue && !optionValues.includes(currentValue)) {
+          optionValues.unshift(currentValue);
+        }
+        optionValues.forEach((optionValue) => {
+          const option = document.createElement("option");
+          option.value = optionValue;
+          option.textContent = optionLabel(optionValue);
+          input.append(option);
+        });
+      } else {
+        input = document.createElement("input");
         input.type = fieldDefinition.type;
       }
       input.value = state.bundle[fieldDefinition.key] || "";
-      input.addEventListener("input", (event) => {
+      input.addEventListener(fieldDefinition.type === "select" ? "change" : "input", (event) => {
         store.setBundleField(fieldDefinition.key, event.target.value, { emit: false });
         refreshDerivedViews();
       });
 
       const hint = document.createElement("p");
       hint.className = "field-hint";
-      hint.textContent =
-        fieldDefinition.key === "name" && validation.bundleErrors.length
-          ? validation.bundleErrors.join(" ")
-          : fieldDefinition.hint;
+      hint.textContent = validation.bundleFieldErrors?.[fieldDefinition.key]?.join(" ") || fieldDefinition.hint;
 
       wrapper.append(label, input, hint);
       bundleForm.append(wrapper);
@@ -303,7 +435,7 @@ export function mountApp({ store }) {
     const addButton = document.createElement("button");
     addButton.type = "button";
     addButton.className = "secondary-button";
-    addButton.textContent = `${moduleDefinition.model} hinzufügen`;
+    addButton.textContent = "Eintrag hinzufügen";
     addButton.addEventListener("click", () => {
       store.addRecord(activeModuleKey, activeDocumentId);
     });
@@ -431,7 +563,7 @@ export function mountApp({ store }) {
     if (!visibleRecords.length) {
       const empty = document.createElement("p");
       empty.className = "muted";
-      empty.textContent = `Noch keine ${moduleDefinition.label.toLowerCase()} in dieser Datei. Füge den ersten ${moduleDefinition.model}-Eintrag hinzu.`;
+      empty.textContent = `Noch keine ${moduleDefinition.label.toLowerCase()} in dieser Datei. Füge den ersten Eintrag hinzu.`;
       stack.append(empty);
     }
 
@@ -442,7 +574,7 @@ export function mountApp({ store }) {
       const fields = fragment.querySelector(".record-fields");
       const recordErrors = validation.moduleErrors[activeModuleKey]?.[actualIndex] || [];
 
-      kicker.textContent = `${moduleDefinition.model} ${recordIndex + 1}${recordErrors.length ? ` • ${recordErrors.length} Fehler` : ""}`;
+      kicker.textContent = `Eintrag ${recordIndex + 1}${recordErrors.length ? ` • ${recordErrors.length} Fehler` : ""}`;
       title.textContent = record.name || "Unbenannter Eintrag";
 
       fragment.querySelector(".delete-record-button").addEventListener("click", () => {
@@ -489,7 +621,7 @@ export function mountApp({ store }) {
       fieldDefinition.options.forEach((optionValue) => {
         const option = document.createElement("option");
         option.value = optionValue;
-        option.textContent = optionValue;
+        option.textContent = optionLabel(optionValue);
         input.append(option);
       });
       input.value = record[fieldDefinition.key] || fieldDefinition.options[0];
@@ -595,11 +727,161 @@ export function mountApp({ store }) {
   }
 
   function renderLintPanel() {
+    if (!lintStatus || !lintOutput) {
+      return;
+    }
     lintStatus.textContent = lintState.summary;
+    lintStatus.classList.toggle("is-ok", lintState.status === "ok");
+    lintStatus.classList.toggle("is-error", lintState.status === "error");
     lintOutput.textContent = lintState.output;
     lintButtons.forEach((lintButton) => {
       lintButton.disabled = lintState.status === "running";
     });
+  }
+
+  function renderMergePanel() {
+    if (!mergePanel) {
+      return;
+    }
+
+    if (!pendingMergePlan) {
+      mergePanel.hidden = true;
+      mergePanel.innerHTML = "";
+      return;
+    }
+
+    mergePanel.hidden = false;
+    mergePanel.innerHTML = "";
+
+    const header = document.createElement("div");
+    header.className = "merge-header";
+    const headerCopy = document.createElement("div");
+    const kicker = document.createElement("p");
+    kicker.className = "section-kicker";
+    kicker.textContent = "Zusammenführen";
+    const title = document.createElement("h2");
+    title.textContent = "Unterschiede prüfen";
+    const summary = document.createElement("p");
+    summary.className = "muted";
+    summary.textContent = `${pendingMergePlan.additions.length} neue Einträge werden automatisch übernommen. ${pendingMergePlan.conflicts.length} Einträge brauchen eine Entscheidung.`;
+    headerCopy.append(kicker, title, summary);
+
+    const actions = document.createElement("div");
+    actions.className = "merge-actions";
+    const keepCurrentButton = document.createElement("button");
+    keepCurrentButton.type = "button";
+    keepCurrentButton.className = "ghost-button";
+    keepCurrentButton.textContent = "Alle aktuellen behalten";
+    keepCurrentButton.addEventListener("click", () => {
+      mergeChoices = Object.fromEntries(pendingMergePlan.conflicts.map((conflict) => [conflict.id, "current"]));
+      renderMergePanel();
+    });
+
+    const useIncomingButton = document.createElement("button");
+    useIncomingButton.type = "button";
+    useIncomingButton.className = "secondary-button";
+    useIncomingButton.textContent = "Alle importierten übernehmen";
+    useIncomingButton.addEventListener("click", () => {
+      mergeChoices = Object.fromEntries(pendingMergePlan.conflicts.map((conflict) => [conflict.id, "incoming"]));
+      renderMergePanel();
+    });
+
+    const applyButton = document.createElement("button");
+    applyButton.type = "button";
+    applyButton.className = "primary-button";
+    applyButton.textContent = "Zusammenführen";
+    applyButton.addEventListener("click", applyPendingMerge);
+
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "ghost-button";
+    cancelButton.textContent = "Abbrechen";
+    cancelButton.addEventListener("click", cancelPendingMerge);
+
+    actions.append(keepCurrentButton, useIncomingButton, applyButton, cancelButton);
+    header.append(headerCopy, actions);
+    mergePanel.append(header);
+
+    if (pendingMergePlan.additions.length) {
+      const additions = document.createElement("p");
+      additions.className = "merge-additions";
+      additions.textContent = `Neue Einträge: ${pendingMergePlan.additions
+        .slice(0, 8)
+        .map((addition) => `${MODULE_MAP[addition.moduleKey].label}: ${addition.recordName}`)
+        .join(", ")}${pendingMergePlan.additions.length > 8 ? " ..." : ""}`;
+      mergePanel.append(additions);
+    }
+
+    const list = document.createElement("div");
+    list.className = "merge-conflict-list";
+    pendingMergePlan.conflicts.forEach((conflict) => {
+      list.append(renderMergeConflict(conflict));
+    });
+    mergePanel.append(list);
+  }
+
+  function renderMergeConflict(conflict) {
+    const card = document.createElement("article");
+    card.className = "merge-conflict-card";
+
+    const header = document.createElement("div");
+    header.className = "merge-conflict-header";
+    const titleBlock = document.createElement("div");
+    const kicker = document.createElement("p");
+    kicker.className = "record-kicker";
+    kicker.textContent = MODULE_MAP[conflict.moduleKey].label;
+    const title = document.createElement("h3");
+    title.textContent = conflict.recordName;
+    titleBlock.append(kicker, title);
+
+    const choiceGroup = document.createElement("div");
+    choiceGroup.className = "merge-choice-group";
+    choiceGroup.append(
+      createMergeChoiceButton(conflict, "current", "Aktuelle Version behalten"),
+      createMergeChoiceButton(conflict, "incoming", "Importierte Version übernehmen"),
+    );
+
+    header.append(titleBlock, choiceGroup);
+    card.append(header);
+
+    const fields = document.createElement("div");
+    fields.className = "merge-field-list";
+    conflict.differences.forEach((difference) => {
+      const row = document.createElement("div");
+      row.className = "merge-field-row";
+
+      const label = document.createElement("p");
+      label.className = "merge-field-label";
+      label.textContent = difference.label;
+
+      const currentValue = document.createElement("div");
+      currentValue.className = "merge-field-value";
+      currentValue.innerHTML = `<strong>Aktuell</strong><span></span>`;
+      currentValue.querySelector("span").textContent = formatMergeValue(difference.currentValue);
+
+      const incomingValue = document.createElement("div");
+      incomingValue.className = "merge-field-value";
+      incomingValue.innerHTML = `<strong>Importiert</strong><span></span>`;
+      incomingValue.querySelector("span").textContent = formatMergeValue(difference.incomingValue);
+
+      row.append(label, currentValue, incomingValue);
+      fields.append(row);
+    });
+
+    card.append(fields);
+    return card;
+  }
+
+  function createMergeChoiceButton(conflict, choice, label) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `tab-button${mergeChoices[conflict.id] === choice ? " active" : ""}`;
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      mergeChoices[conflict.id] = choice;
+      renderMergePanel();
+    });
+    return button;
   }
 }
 

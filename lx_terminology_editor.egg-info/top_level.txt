@@ -1,1 +1,2 @@
+lx_terminology_editor
 server

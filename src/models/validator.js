@@ -2,6 +2,16 @@ import { MODULE_DEFINITIONS, MODULE_MAP, normalizeSelectedModules } from "./modu
 import { createDefaultDocument, createDefaultState, createEmptyRecord } from "./state-factory.js";
 
 export const RECORD_PASSTHROUGH_KEY = "_passthrough";
+const SELECT_OPTION_LABELS = {
+  boolean: "Ja/Nein",
+  numeric: "Zahl",
+  selection: "Auswahl",
+  text: "Text",
+};
+
+function formatSelectOptions(options) {
+  return options.map((option) => SELECT_OPTION_LABELS[option] || option).join(", ");
+}
 
 export function pruneEmpty(value) {
   if (Array.isArray(value)) {
@@ -45,6 +55,12 @@ export function normalizeBundle(candidateBundle = {}) {
     description:
       typeof candidateBundle.description === "string" ? candidateBundle.description : fallbackBundle.description,
     version: typeof candidateBundle.version === "string" ? candidateBundle.version : fallbackBundle.version,
+    medical_field:
+      typeof candidateBundle.medical_field === "string"
+        ? candidateBundle.medical_field
+        : typeof candidateBundle.medicalField === "string"
+          ? candidateBundle.medicalField
+          : fallbackBundle.medical_field,
     modules: normalizeSelectedModules(
       Array.isArray(candidateBundle.modules) ? candidateBundle.modules : fallbackBundle.modules,
     ),
@@ -159,7 +175,7 @@ export function validateRecord(moduleDefinition, record) {
     }
 
     if (fieldDefinition.type === "select" && value && !fieldDefinition.options.includes(value)) {
-      errors.push(`${fieldDefinition.label} muss einer der folgenden Werte sein: ${fieldDefinition.options.join(", ")}.`);
+      errors.push(`${fieldDefinition.label} muss einer der folgenden Werte sein: ${formatSelectOptions(fieldDefinition.options)}.`);
     }
   });
 
@@ -169,15 +185,26 @@ export function validateRecord(moduleDefinition, record) {
 export function validateBundle(state) {
   const normalizedState = normalizeState(state);
   const bundleErrors = [];
+  const bundleFieldErrors = {};
   const moduleErrors = {};
   let totalErrors = 0;
 
   if (!normalizedState.bundle.name.trim()) {
-    bundleErrors.push("Bundle-Name ist erforderlich.");
+    const message = "Paketname ist erforderlich.";
+    bundleErrors.push(message);
+    bundleFieldErrors.name = [message];
   }
 
   if (!normalizedState.bundle.version.trim()) {
-    bundleErrors.push("Bundle-Version ist erforderlich.");
+    const message = "Version ist erforderlich.";
+    bundleErrors.push(message);
+    bundleFieldErrors.version = [message];
+  }
+
+  if (!normalizedState.bundle.medical_field.trim()) {
+    const message = "Fachbereich ist erforderlich.";
+    bundleErrors.push(message);
+    bundleFieldErrors.medical_field = [message];
   }
 
   normalizedState.bundle.modules.forEach((moduleKey) => {
@@ -190,6 +217,7 @@ export function validateBundle(state) {
 
   return {
     bundleErrors,
+    bundleFieldErrors,
     moduleErrors,
     totalErrors,
   };

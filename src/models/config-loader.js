@@ -1,11 +1,23 @@
 import { MODULE_MAP } from "./module-definitions.js";
 import { RECORD_PASSTHROUGH_KEY, pruneEmpty } from "./validator.js";
 
+function normalizeBundleIdentity(value, fallback) {
+  return (
+    String(value || "")
+      .trim()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9._-]+/gi, "_")
+      .replace(/^[_-]+|[_-]+$/g, "") || fallback
+  );
+}
+
 export function buildRootConfig(bundle) {
   return pruneEmpty({
-    name: bundle.name,
+    name: normalizeBundleIdentity(bundle.name, "terminologiepaket"),
     description: bundle.description,
-    version: bundle.version,
+    version: normalizeBundleIdentity(bundle.version, "0.1.0"),
+    medical_field: normalizeBundleIdentity(bundle.medical_field, "gastroenterology"),
     modules: bundle.modules,
   });
 }
@@ -61,8 +73,8 @@ export function buildPreviewGroups(state) {
   const groups = [
     {
       key: "root",
-      label: "Root",
-      description: "Zentrale Bundle-Konfiguration",
+      label: "Basis",
+      description: "Zentrale Paketkonfiguration",
       files: [
         {
           path: "config.yaml",

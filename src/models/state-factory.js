@@ -23,9 +23,10 @@ export function createEmptyRecord(moduleDefinition) {
 export function createDefaultState() {
   const state = {
     bundle: {
-      name: "example_terminology",
-      description: "Shared terminology bundle for LX-compatible YAML exports.",
+      name: "beispiel_terminologie",
+      description: "Gemeinsames Terminologiepaket für LX-kompatible YAML-Exporte.",
       version: "0.1.0",
+      medical_field: "gastroenterology",
       modules: normalizeSelectedModules(MODULE_DEFINITIONS.map((moduleDefinition) => moduleDefinition.key)),
     },
     documents: {},
@@ -41,7 +42,7 @@ export function createDefaultState() {
     {
       _documentId: state.documents.lx_examinations[0].id,
       name: "colonoscopy",
-      description: "Colonoscopy examination.",
+      description: "Koloskopie-Untersuchung.",
       examination_types: ["endoscopic_procedure"],
       findings: ["colon_polyp", "colon_inflammation"],
       indications: ["colonoscopy_screening"],
@@ -70,7 +71,7 @@ export function createDefaultState() {
     {
       _documentId: state.documents.lx_classifications[0].id,
       name: "colon_lesion_paris",
-      name_de: "Formklassifikation Kolonlaesion",
+      name_de: "Formklassifikation Kolonläsion",
       name_en: "Colon Lesion Shape Classification",
       classification_types: ["morphology"],
       classification_choices: ["colon_lesion_paris_Is", "colon_lesion_paris_IIa"],
@@ -94,7 +95,7 @@ export function createDefaultState() {
       abbreviation: "min",
       name_de: "Minuten",
       name_en: "Minutes",
-      description: "Time unit for durations and numeric time values.",
+      description: "Zeiteinheit für Dauerangaben und numerische Zeitwerte.",
       unit_types: ["time"],
     },
     {
@@ -103,7 +104,7 @@ export function createDefaultState() {
       abbreviation: "mm",
       name_de: "Millimeter",
       name_en: "Millimeter",
-      description: "Length unit for sizes such as lesion diameter.",
+      description: "Längeneinheit für Größenangaben wie Läsionsdurchmesser.",
       unit_types: ["length"],
     },
   ];
@@ -112,7 +113,7 @@ export function createDefaultState() {
     {
       _documentId: state.documents.lx_descriptors[0].id,
       name: "minutes_numeric_value",
-      description: "Numeric value representing minutes.",
+      description: "Numerischer Wert in Minuten.",
       unit: "minutes",
       classification_choice_descriptor_type: "numeric",
     },

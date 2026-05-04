@@ -114,6 +114,85 @@ h1 {
   background: linear-gradient(180deg, rgba(255, 250, 244, 0.88), rgba(247, 237, 223, 0.95));
 }
 
+.merge-panel {
+  margin-bottom: 24px;
+  background: rgba(255, 252, 247, 0.96);
+}
+
+.merge-header,
+.merge-conflict-header,
+.merge-field-row {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: start;
+}
+
+.merge-actions,
+.merge-choice-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.merge-additions {
+  margin: 4px 0 18px;
+  color: var(--muted);
+}
+
+.merge-conflict-list {
+  display: grid;
+  gap: 14px;
+}
+
+.merge-conflict-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--panel-strong);
+  padding: 16px;
+}
+
+.merge-field-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.merge-field-row {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.merge-field-label {
+  min-width: 140px;
+  margin-bottom: 0;
+  font-family: "Trebuchet MS", "Gill Sans", sans-serif;
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+.merge-field-value {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.merge-field-value strong {
+  font-family: "Trebuchet MS", "Gill Sans", sans-serif;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.merge-field-value span {
+  overflow-wrap: anywhere;
+}
+
 .panel-header {
   display: flex;
   gap: 16px;
@@ -436,6 +515,14 @@ h1 {
   max-height: 320px;
 }
 
+.lint-status.is-ok {
+  color: #1f5c2e;
+}
+
+.lint-status.is-error {
+  color: #892f1f;
+}
+
 .toast {
   position: fixed;
   right: 20px;
@@ -477,7 +564,15 @@ h1 {
 
   .record-card-header,
   .module-actions,
-  .panel-header {
+  .panel-header,
+  .merge-header,
+  .merge-conflict-header,
+  .merge-field-row {
     flex-direction: column;
+  }
+
+  .merge-actions,
+  .merge-choice-group {
+    justify-content: stretch;
   }
 }
