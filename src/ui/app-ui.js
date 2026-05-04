@@ -798,9 +798,9 @@ export function mountApp({ store }) {
     if (fieldDefinition.type === "tags") {
       defaultHint = "Werte durch Kommas trennen.";
     } else if (fieldDefinition.type === "reference-tags") {
-      defaultHint = "Einträge aus der Liste auswählen.";
+      defaultHint = "Einträge aus den im aktuellen Paket angelegten Dateien auswählen.";
     } else if (fieldDefinition.type === "reference") {
-      defaultHint = "Eintrag aus der Liste auswählen.";
+      defaultHint = "Eintrag aus den im aktuellen Paket angelegten Dateien auswählen.";
     } else if (fieldDefinition.type === "json") {
       defaultHint = "JSON-Objekt eingeben.";
     } else if (fieldDefinition.type === "json-list") {
@@ -810,7 +810,7 @@ export function mountApp({ store }) {
     } else if (fieldDefinition.type === "numeric-distribution-params") {
       defaultHint = "Die Eingaben werden als lx-data-models-Verteilungsparameter exportiert.";
     } else if (fieldDefinition.type === "selection-default-options") {
-      defaultHint = "Die Eingaben werden als lx-data-models-Standardoptionen exportiert.";
+      defaultHint = "Eine Zeile pro Option, z.B. adenoma = 1. Das Auswahlmenü nutzt die hier angelegten Auswahloptionen.";
     } else if (fieldDefinition.type === "boolean") {
       defaultHint = "Häkchen setzen, wenn ja.";
     }
@@ -1001,38 +1001,57 @@ export function mountApp({ store }) {
     const container = document.createElement("div");
     container.className = "validator-rule-builder";
     const params = getObjectFieldValue(record[fieldDefinition.key]);
-    const optionValues = mergeUniqueValues([...(Array.isArray(record.selection_options) ? record.selection_options : []), ...Object.keys(params)]);
+    const createdOptionValues = Array.isArray(record.selection_options) ? record.selection_options : [];
+    const optionValues = mergeUniqueValues([...createdOptionValues, ...Object.keys(params)]);
 
     const ruleText = document.createElement("p");
     ruleText.className = "rule-text-block";
     ruleText.textContent = buildSelectionDefaultsText(optionValues, params);
     container.append(ruleText);
 
-    if (!optionValues.length) {
-      return container;
-    }
-
     const controls = document.createElement("div");
     controls.className = "rule-builder-grid";
-    const optionInputs = optionValues.map((optionValue) => {
-      const control = createDescriptorNumberInput(optionValue, params[optionValue] ?? "", "0 bis 1");
-      controls.append(control.wrapper);
-      return { optionValue, input: control.input };
-    });
 
-    const writeDefaults = () => {
-      const nextParams = { ...params };
-      optionInputs.forEach(({ optionValue, input }) => {
-        setOptionalNumber(nextParams, optionValue, input.value);
+    const optionSelect = createRuleSelect("Option aus diesem Paket", "Auswahloption einfügen", "", (select) => {
+      mergeUniqueValues(createdOptionValues).forEach((optionValue) => {
+        const option = document.createElement("option");
+        option.value = optionValue;
+        option.textContent = optionValue;
+        select.append(option);
       });
+    });
+    optionSelect.input.disabled = createdOptionValues.length === 0;
+
+    const textControl = createRuleTextArea(
+      "Standardgewichte",
+      formatSelectionDefaultsText(optionValues, params),
+      "adenoma = 1\nhyperplastic = 0.5",
+    );
+    controls.append(optionSelect.wrapper, textControl.wrapper);
+
+    const writeDefaults = (textValue = textControl.input.value) => {
+      const nextParams = parseSelectionDefaultsText(textValue);
+      const nextOptionValues = mergeUniqueValues([...createdOptionValues, ...Object.keys(nextParams)]);
       store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, nextParams, { emit: false });
-      ruleText.textContent = buildSelectionDefaultsText(optionValues, nextParams);
+      ruleText.textContent = buildSelectionDefaultsText(nextOptionValues, nextParams);
       refreshDerivedViews();
     };
 
-    optionInputs.forEach(({ input }) => {
-      input.addEventListener("input", writeDefaults);
+    optionSelect.input.addEventListener("change", () => {
+      const selectedOption = optionSelect.input.value;
+      if (!selectedOption) {
+        return;
+      }
+      const currentLines = splitSelectionDefaultLines(textControl.input.value);
+      const existingNames = new Set(currentLines.map((line) => parseSelectionDefaultLine(line)?.name).filter(Boolean));
+      if (!existingNames.has(selectedOption)) {
+        currentLines.push(`${selectedOption} = 1`);
+        textControl.input.value = currentLines.join("\n");
+        writeDefaults(textControl.input.value);
+      }
+      optionSelect.input.value = "";
     });
+    textControl.input.addEventListener("input", () => writeDefaults());
 
     container.append(controls);
     return container;
@@ -1052,6 +1071,19 @@ export function mountApp({ store }) {
     return { wrapper, input };
   }
 
+  function createRuleTextArea(labelText, currentValue, placeholder) {
+    const wrapper = document.createElement("label");
+    wrapper.className = "rule-control";
+    const text = document.createElement("span");
+    text.textContent = labelText;
+    const input = document.createElement("textarea");
+    input.value = currentValue;
+    input.placeholder = placeholder;
+    input.rows = 4;
+    wrapper.append(text, input);
+    return { wrapper, input };
+  }
+
   function getObjectFieldValue(value) {
     return value && typeof value === "object" && !Array.isArray(value) ? value : {};
   }
@@ -1066,10 +1098,16 @@ export function mountApp({ store }) {
       delete target[key];
       return;
     }
-    const numericValue = Number(trimmed);
-    if (Number.isFinite(numericValue)) {
+    const numericValue = parseDescriptorNumber(trimmed);
+    if (numericValue !== null) {
       target[key] = numericValue;
     }
+  }
+
+  function parseDescriptorNumber(value) {
+    const normalized = String(value ?? "").trim().replace(",", ".");
+    const numericValue = Number(normalized);
+    return Number.isFinite(numericValue) ? numericValue : null;
   }
 
   function buildNumericDistributionText(record, params) {
@@ -1089,6 +1127,44 @@ export function mountApp({ store }) {
     return configured.length
       ? `Standardgewichte: ${configured.join(", ")}.`
       : "Keine Standardgewichte gesetzt. Ohne Eingabe bleibt die Auswahl gleichwertig.";
+  }
+
+  function formatSelectionDefaultsText(optionValues, params) {
+    return optionValues
+      .filter((optionValue) => params[optionValue] !== undefined && params[optionValue] !== "")
+      .map((optionValue) => `${optionValue} = ${params[optionValue]}`)
+      .join("\n");
+  }
+
+  function parseSelectionDefaultsText(value) {
+    const result = {};
+    splitSelectionDefaultLines(value).forEach((line) => {
+      const parsed = parseSelectionDefaultLine(line);
+      if (parsed) {
+        result[parsed.name] = parsed.weight;
+      }
+    });
+    return result;
+  }
+
+  function splitSelectionDefaultLines(value) {
+    return String(value || "")
+      .split(/\r?\n|;/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+
+  function parseSelectionDefaultLine(line) {
+    const match = line.match(/^(.+?)(?:\s*[=:]\s*|\s+)([-+]?\d+(?:[.,]\d+)?)$/);
+    if (!match) {
+      return null;
+    }
+    const name = match[1].trim();
+    const weight = parseDescriptorNumber(match[2]);
+    if (!name || weight === null) {
+      return null;
+    }
+    return { name, weight };
   }
 
   function createRuleSelect(labelText, placeholderText, currentValue, appendOptions) {
