@@ -51,6 +51,7 @@ Pyodide.
 - Exportiert und importiert komplette Terminologiepakete als `.zip`
 - Führt ein weiteres `.zip`-Paket mit dem aktuellen Entwurf zusammen und zeigt Entscheidungen auf Datensatzebene
 - Führt die YAML-Paketprüfung im Browser über Pyodide aus
+- Dokumentiert die aktuellen UX-Verbesserungen in [`docs/ux-improvements-plan.md`](docs/ux-improvements-plan.md)
 
 ## Hinweise
 

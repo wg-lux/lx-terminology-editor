@@ -105,6 +105,25 @@ const REQUIREMENT_SOURCE_MODULES = {
   intervention: "lx_interventions",
   unit: "lx_units",
 };
+const IMPORTANT_FIELD_KEYS = new Set(["name", "name_de", "name_en"]);
+const CONCEPT_MODULE_ORDER = [
+  "lx_examinations",
+  "lx_findings",
+  "lx_interventions",
+  "lx_classifications",
+  "lx_classification_choices",
+  "lx_descriptors",
+  "lx_units",
+];
+const CONCEPT_MODULE_TIER = {
+  lx_examinations: "Examination",
+  lx_findings: "Finding",
+  lx_interventions: "Intervention",
+  lx_classifications: "Classification",
+  lx_classification_choices: "ClassificationChoice",
+  lx_descriptors: "ClassificationDescriptor",
+  lx_units: "Unit",
+};
 
 function optionLabel(value) {
   return FIELD_OPTION_LABELS[value] || VALIDATOR_COMPARATOR_LABELS[value] || REQUIREMENT_KIND_LABELS[value] || value;
@@ -115,17 +134,22 @@ export function mountApp({ store }) {
   const modulePickers = document.querySelector("#module-pickers");
   const moduleTabs = document.querySelector("#module-tabs");
   const moduleEditor = document.querySelector("#module-editor");
+  const sectionToggleButtons = document.querySelectorAll("[data-section-toggle]");
   const fileTabs = document.querySelector("#file-tabs");
   const filePreview = document.querySelector("#file-preview");
+  const conceptSearchInput = document.querySelector("#concept-search-input");
+  const conceptSearchResults = document.querySelector("#concept-search-results");
+  const findingSuggestions = document.querySelector("#finding-suggestions");
   const shareButton = document.querySelector("#share-button");
   const downloadButton = document.querySelector("#download-button");
-  const zipDownloadButton = document.querySelector("#zip-download-button");
+  const zipDownloadButtons = document.querySelectorAll('[data-action="zip-download"]');
   const zipOpenButton = document.querySelector("#zip-open-button");
   const zipMergeButton = document.querySelector("#zip-merge-button");
   const zipImportInput = document.querySelector("#zip-import-input");
   const mergePanel = document.querySelector("#merge-panel");
   const lintButtons = document.querySelectorAll('[data-action="lint"]');
   const resetButton = document.querySelector("#reset-button");
+  const emptyResetButton = document.querySelector("#empty-reset-button");
   const cardTemplate = document.querySelector("#record-card-template");
   const lintStatus = document.querySelector("#lint-status");
   const lintOutput = document.querySelector("#lint-output");
@@ -134,6 +158,14 @@ export function mountApp({ store }) {
   let activePreviewGroupKey = "root";
   let activeFilePath = "config.yaml";
   const activeDocumentIds = {};
+  const collapsedFieldKeys = new Set();
+  const expandedFieldKeys = new Set();
+  const openInfoKeys = new Set();
+  const expandedTreeNodes = new Set(["files", "hierarchy"]);
+  const collapsedSectionKeys = new Set(["module-pickers"]);
+  const collapsedRecordKeys = new Set();
+  let conceptSearchQuery = "";
+  let pendingFocusRecordKey = "";
   let lintState = {
     status: "idle",
     summary: "Noch nicht geprüft.",
@@ -166,16 +198,18 @@ export function mountApp({ store }) {
     showToast("YAML-Dateien heruntergeladen.");
   });
 
-  zipDownloadButton.addEventListener("click", async () => {
-    try {
-      const state = store.getState();
-      const bundleName = (state.bundle.name || "terminologiepaket").trim() || "terminologiepaket";
-      await downloadBundleZip(buildSerializedFiles(state), `${bundleName}.zip`);
-      showToast("ZIP-Datei heruntergeladen.");
-    } catch (error) {
-      console.error(error);
-      showToast("ZIP-Download fehlgeschlagen.");
-    }
+  zipDownloadButtons.forEach((zipDownloadButton) => {
+    zipDownloadButton.addEventListener("click", async () => {
+      try {
+        const state = store.getState();
+        const bundleName = (state.bundle.name || "terminologiepaket").trim() || "terminologiepaket";
+        await downloadBundleZip(buildSerializedFiles(state), `${bundleName}.zip`);
+        showToast("ZIP-Datei heruntergeladen.");
+      } catch (error) {
+        console.error(error);
+        showToast("ZIP-Download fehlgeschlagen.");
+      }
+    });
   });
 
   zipOpenButton.addEventListener("click", () => {
@@ -243,16 +277,87 @@ export function mountApp({ store }) {
   });
 
   resetButton.addEventListener("click", () => {
-    pendingMergePlan = null;
-    mergeChoices = {};
+    resetTransientUiState();
     store.reset();
     focusFirstModule();
     render(store.getState());
     showToast("Beispielpaket wiederhergestellt.");
   });
 
+  emptyResetButton?.addEventListener("click", () => {
+    resetTransientUiState();
+    store.resetEmpty();
+    focusFirstModule();
+    render(store.getState());
+    showToast("Leeres Paket angelegt.");
+  });
+
+  conceptSearchInput?.addEventListener("input", (event) => {
+    conceptSearchQuery = event.target.value;
+    renderConceptSearch(store.getState());
+  });
+
+  sectionToggleButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const sectionKey = button.dataset.sectionToggle;
+      if (!sectionKey) {
+        return;
+      }
+      if (collapsedSectionKeys.has(sectionKey)) {
+        collapsedSectionKeys.delete(sectionKey);
+      } else {
+        collapsedSectionKeys.add(sectionKey);
+      }
+      syncCollapsibleSections();
+    });
+  });
+
   store.subscribe(render);
   render(store.getState());
+
+  function resetTransientUiState() {
+    pendingMergePlan = null;
+    mergeChoices = {};
+    Object.keys(activeDocumentIds).forEach((moduleKey) => {
+      delete activeDocumentIds[moduleKey];
+    });
+    collapsedFieldKeys.clear();
+    expandedFieldKeys.clear();
+    openInfoKeys.clear();
+    expandedTreeNodes.clear();
+    expandedTreeNodes.add("files");
+    expandedTreeNodes.add("hierarchy");
+    collapsedSectionKeys.clear();
+    collapsedSectionKeys.add("module-pickers");
+    collapsedRecordKeys.clear();
+    conceptSearchQuery = "";
+    if (conceptSearchInput) {
+      conceptSearchInput.value = "";
+    }
+    lintState = {
+      status: "idle",
+      summary: "Noch nicht geprüft.",
+      output: "Noch keine Prüfausgabe.",
+    };
+  }
+
+  function syncCollapsibleSections() {
+    document.querySelectorAll("[data-collapsible-section]").forEach((section) => {
+      const sectionKey = section.dataset.collapsibleSection;
+      const collapsed = collapsedSectionKeys.has(sectionKey);
+      section.classList.toggle("is-collapsed", collapsed);
+      const body = section.querySelector("[data-section-body]");
+      if (body) {
+        body.hidden = collapsed;
+      }
+      const toggle = section.querySelector("[data-section-toggle]");
+      if (toggle) {
+        toggle.textContent = collapsed ? "+" : "-";
+        toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        toggle.title = collapsed ? "Ausklappen" : "Einklappen";
+      }
+    });
+  }
 
   function openImportedState(importedState) {
     const confirmed = window.confirm("Dieses ZIP öffnet ein neues Paket und ersetzt den aktuellen Arbeitsstand.");
@@ -359,10 +464,14 @@ export function mountApp({ store }) {
       renderBundleForm(state, validation);
       renderModulePickers(state);
       renderModuleTabs(state, validation);
+      renderConceptSearch(state);
+      renderFindingSuggestions(state);
       renderModuleEditor(state, validation);
       renderPreview(state, previewGroups);
       renderLintPanel();
       renderMergePanel();
+      syncCollapsibleSections();
+      scrollPendingRecordIntoView();
     } catch (error) {
       console.error("UI konnte nicht gerendert werden", error);
       moduleEditor.innerHTML = "";
@@ -399,12 +508,6 @@ export function mountApp({ store }) {
     bundleForm.innerHTML = "";
 
     fields.forEach((fieldDefinition) => {
-      const wrapper = document.createElement("div");
-      wrapper.className = `field${fieldDefinition.full ? " field-full" : ""}`;
-
-      const label = document.createElement("label");
-      label.textContent = fieldDefinition.label;
-
       let input;
       if (fieldDefinition.type === "textarea") {
         input = document.createElement("textarea");
@@ -431,13 +534,93 @@ export function mountApp({ store }) {
         refreshDerivedViews();
       });
 
-      const hint = document.createElement("p");
-      hint.className = "field-hint";
-      hint.textContent = validation.bundleFieldErrors?.[fieldDefinition.key]?.join(" ") || fieldDefinition.hint;
-
-      wrapper.append(label, input, hint);
-      bundleForm.append(wrapper);
+      const errorText = validation.bundleFieldErrors?.[fieldDefinition.key]?.join(" ") || "";
+      bundleForm.append(
+        createFieldShell({
+          fieldKey: `bundle:${fieldDefinition.key}`,
+          labelText: fieldDefinition.label,
+          input,
+          hintText: fieldDefinition.hint,
+          errorText,
+          full: fieldDefinition.full,
+          defaultExpanded: IMPORTANT_FIELD_KEYS.has(fieldDefinition.key) || ["version", "medical_field"].includes(fieldDefinition.key) || Boolean(errorText),
+        }),
+      );
     });
+  }
+
+  function createFieldShell({ fieldKey, labelText, input, hintText, errorText = "", full = false, defaultExpanded = false }) {
+    const wrapper = document.createElement("div");
+    const expanded = isFieldExpanded(fieldKey, defaultExpanded);
+    const infoOpen = openInfoKeys.has(fieldKey);
+    wrapper.className = `field${full ? " field-full" : ""}${expanded ? "" : " is-collapsed"}${errorText ? " has-error" : ""}`;
+
+    const header = document.createElement("div");
+    header.className = "field-header";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "field-toggle";
+    toggle.textContent = expanded ? "-" : "+";
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    toggle.addEventListener("click", () => {
+      if (expanded) {
+        collapsedFieldKeys.add(fieldKey);
+        expandedFieldKeys.delete(fieldKey);
+      } else {
+        expandedFieldKeys.add(fieldKey);
+        collapsedFieldKeys.delete(fieldKey);
+      }
+      render(store.getState());
+    });
+
+    const label = document.createElement("span");
+    label.className = "field-label";
+    label.textContent = labelText;
+
+    const infoButton = document.createElement("button");
+    infoButton.type = "button";
+    infoButton.className = `info-button${infoOpen ? " active" : ""}`;
+    infoButton.textContent = "i";
+    infoButton.title = "Helfertext anzeigen";
+    infoButton.setAttribute("aria-label", `${labelText}: Helfertext anzeigen`);
+    infoButton.addEventListener("click", () => {
+      if (openInfoKeys.has(fieldKey)) {
+        openInfoKeys.delete(fieldKey);
+      } else {
+        openInfoKeys.add(fieldKey);
+      }
+      render(store.getState());
+    });
+
+    header.append(toggle, label, infoButton);
+    wrapper.append(header);
+
+    const body = document.createElement("div");
+    body.className = "field-body";
+    if (expanded) {
+      body.append(input);
+    }
+
+    const hint = document.createElement("p");
+    hint.className = `field-hint${errorText ? " field-error" : ""}`;
+    hint.textContent = errorText || hintText;
+    if (errorText || infoOpen) {
+      body.append(hint);
+    }
+
+    wrapper.append(body);
+    return wrapper;
+  }
+
+  function isFieldExpanded(fieldKey, defaultExpanded) {
+    if (collapsedFieldKeys.has(fieldKey)) {
+      return false;
+    }
+    if (expandedFieldKeys.has(fieldKey)) {
+      return true;
+    }
+    return defaultExpanded;
   }
 
   function renderModulePickers(state) {
@@ -446,10 +629,15 @@ export function mountApp({ store }) {
     Object.values(MODULE_MAP)
       .filter((moduleDefinition) => !moduleDefinition.hidden)
       .forEach((moduleDefinition) => {
+        const infoKey = `module-picker:${moduleDefinition.key}`;
+        const infoOpen = openInfoKeys.has(infoKey);
         const card = document.createElement("div");
-        card.className = "picker-card";
+        card.className = `picker-card${infoOpen ? " info-open" : ""}`;
 
+        const header = document.createElement("div");
+        header.className = "picker-card-header";
         const label = document.createElement("label");
+        label.className = "picker-card-title";
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = state.bundle.modules.includes(moduleDefinition.key);
@@ -458,11 +646,34 @@ export function mountApp({ store }) {
         });
 
         label.append(checkbox, document.createTextNode(moduleDefinition.label));
+        const infoButton = document.createElement("button");
+        infoButton.type = "button";
+        infoButton.className = `info-button${infoOpen ? " active" : ""}`;
+        infoButton.textContent = "i";
+        infoButton.title = "Modulinfo anzeigen";
+        infoButton.setAttribute("aria-label", `${moduleDefinition.label}: Modulinfo anzeigen`);
+        infoButton.addEventListener("click", () => {
+          if (openInfoKeys.has(infoKey)) {
+            openInfoKeys.delete(infoKey);
+          } else {
+            openInfoKeys.add(infoKey);
+          }
+          renderModulePickers(store.getState());
+        });
+        header.append(label, infoButton);
+        card.append(header);
 
-        const description = document.createElement("p");
-        description.textContent = moduleDefinition.description;
+        const section = document.createElement("p");
+        section.className = "picker-section";
+        section.textContent = `Sektion: Datensätze / ${moduleDefinition.label}`;
+        card.append(section);
 
-        card.append(label, description);
+        if (infoOpen) {
+          const description = document.createElement("p");
+          description.className = "picker-info";
+          description.textContent = `${moduleDefinition.description} In der Modulauswahl aktivierst du das Modul; im Datensatzbereich bearbeitest du Einträge; in der Vorschau findest du die erzeugten YAML-Dateien und Konzeptverweise.`;
+          card.append(description);
+        }
         modulePickers.append(card);
       });
   }
@@ -496,6 +707,231 @@ export function mountApp({ store }) {
       });
       moduleTabs.append(button);
     });
+  }
+
+  function renderConceptSearch(state) {
+    if (!conceptSearchResults) {
+      return;
+    }
+    conceptSearchResults.innerHTML = "";
+    const results = buildConceptSearchResults(state, conceptSearchQuery).slice(0, 12);
+
+    if (!conceptSearchQuery.trim()) {
+      const empty = document.createElement("p");
+      empty.className = "reference-empty";
+      empty.textContent = "Suche nach Konzepten, Dateien, Modulen oder Referenzen im aktuellen Paket.";
+      conceptSearchResults.append(empty);
+      return;
+    }
+
+    if (!results.length) {
+      const empty = document.createElement("p");
+      empty.className = "reference-empty";
+      empty.textContent = "Keine passenden Konzepte gefunden.";
+      conceptSearchResults.append(empty);
+      return;
+    }
+
+    results.forEach((result) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "concept-result";
+      button.setAttribute("role", "listitem");
+      button.innerHTML = "<strong></strong><span></span>";
+      button.querySelector("strong").textContent = result.title;
+      button.querySelector("span").textContent = result.meta;
+      button.addEventListener("click", () => {
+        conceptSearchQuery = result.title;
+        if (conceptSearchInput) {
+          conceptSearchInput.value = result.title;
+        }
+        focusRecord(result.moduleKey, result.recordIndex);
+      });
+      conceptSearchResults.append(button);
+    });
+  }
+
+  function buildConceptSearchResults(state, query) {
+    const normalizedQuery = normalizeSearchText(query);
+    if (!normalizedQuery) {
+      return [];
+    }
+
+    const results = [];
+    state.bundle.modules
+      .filter((moduleKey) => !MODULE_MAP[moduleKey]?.hidden)
+      .forEach((moduleKey) => {
+        const moduleDefinition = MODULE_MAP[moduleKey];
+        const documents = state.documents?.[moduleKey] || [];
+        (state.records?.[moduleKey] || []).forEach((record, recordIndex) => {
+          const documentName = documents.find((document) => document.id === record._documentId)?.name || "custom.yaml";
+          const values = [
+            moduleDefinition.label,
+            moduleDefinition.key,
+            documentName,
+            record.name,
+            record.name_de,
+            record.name_en,
+            record.description,
+            ...moduleDefinition.fields.flatMap((fieldDefinition) => {
+              const value = record[fieldDefinition.key];
+              return Array.isArray(value) ? value : [];
+            }),
+          ];
+          const haystack = normalizeSearchText(values.join(" "));
+          if (!haystack.includes(normalizedQuery)) {
+            return;
+          }
+          results.push({
+            moduleKey,
+            recordIndex,
+            title: recordDisplayName(record) || record.name || "Unbenannter Eintrag",
+            meta: `${moduleDefinition.label} / ${documentName}`,
+          });
+        });
+      });
+    return results;
+  }
+
+  function normalizeSearchText(value) {
+    return String(value || "")
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function renderFindingSuggestions(state) {
+    if (!findingSuggestions) {
+      return;
+    }
+    findingSuggestions.innerHTML = "";
+    const suggestions = buildMissingFindingSuggestions(state);
+    if (!suggestions.length) {
+      findingSuggestions.hidden = true;
+      return;
+    }
+
+    findingSuggestions.hidden = false;
+    const header = document.createElement("div");
+    header.className = "suggestion-header";
+    const title = document.createElement("p");
+    title.className = "document-label";
+    title.textContent = "Vorschläge für neue Befunde";
+    const description = document.createElement("p");
+    description.className = "document-hint";
+    description.textContent = "Fehlende Befunde aus vorhandenen Referenzen übernehmen.";
+    header.append(title, description);
+
+    const list = document.createElement("div");
+    list.className = "suggestion-list";
+    suggestions.slice(0, 8).forEach((suggestion) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "suggestion-chip";
+      button.innerHTML = "<strong></strong><span></span>";
+      button.querySelector("strong").textContent = suggestion.name;
+      button.querySelector("span").textContent = suggestion.sources.join(", ");
+      button.addEventListener("click", () => {
+        const findingDocumentId =
+          activeModuleKey === "lx_findings"
+            ? activeDocumentIds.lx_findings || state.documents.lx_findings?.[0]?.id
+            : state.documents.lx_findings?.[0]?.id;
+        store.addRecordWithValues("lx_findings", findingDocumentId, {
+          name: suggestion.name,
+          name_de: humanizeConceptName(suggestion.name),
+          finding_types: ["observation"],
+        });
+        const nextState = store.getState();
+        const newIndex = nextState.records.lx_findings.length - 1;
+        focusRecord("lx_findings", newIndex);
+        showToast("Befund angelegt.");
+      });
+      list.append(button);
+    });
+
+    findingSuggestions.append(header, list);
+  }
+
+  function buildMissingFindingSuggestions(state) {
+    const existingFindings = new Set((state.records.lx_findings || []).map((record) => record.name).filter(Boolean));
+    const references = new Map();
+    const addReference = (name, source) => {
+      const normalizedName = String(name || "").trim();
+      if (!normalizedName || existingFindings.has(normalizedName)) {
+        return;
+      }
+      if (!references.has(normalizedName)) {
+        references.set(normalizedName, new Set());
+      }
+      references.get(normalizedName).add(source);
+    };
+
+    (state.records.lx_examinations || []).forEach((record) => {
+      (Array.isArray(record.findings) ? record.findings : []).forEach((name) => {
+        addReference(name, record.name ? `Untersuchung ${record.name}` : "Untersuchung");
+      });
+    });
+    (state.records.lx_report_templates || []).forEach((record) => {
+      (Array.isArray(record.report_findings) ? record.report_findings : []).forEach((name) => {
+        addReference(name, record.name ? `Bericht ${record.name}` : "Bericht");
+      });
+    });
+    (state.records.lx_report_template_sections || []).forEach((record) => {
+      (Array.isArray(record.findings) ? record.findings : []).forEach((name) => {
+        addReference(name, record.name ? `Berichtsabschnitt ${record.name}` : "Berichtsabschnitt");
+      });
+    });
+
+    return [...references.entries()].map(([name, sources]) => ({ name, sources: [...sources] }));
+  }
+
+  function humanizeConceptName(value) {
+    return String(value || "")
+      .replace(/^lx_/, "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function focusRecord(moduleKey, recordIndex) {
+    const nextState = store.getState();
+    const record = nextState.records?.[moduleKey]?.[recordIndex];
+    if (!record) {
+      return;
+    }
+    if (!MODULE_MAP[moduleKey]?.hidden) {
+      activeModuleKey = moduleKey;
+    }
+    activePreviewGroupKey = moduleKey;
+    const document = nextState.documents?.[moduleKey]?.find((entry) => entry.id === record._documentId);
+    if (document) {
+      activeDocumentIds[moduleKey] = document.id;
+      activeFilePath = `${moduleKey}/data/${document.name}`;
+    }
+    expandedTreeNodes.add(moduleKey);
+    collapsedSectionKeys.delete("records");
+    pendingFocusRecordKey = getRecordDomKey(moduleKey, recordIndex);
+    collapsedRecordKeys.delete(pendingFocusRecordKey);
+    render(nextState);
+  }
+
+  function getRecordDomKey(moduleKey, recordIndex) {
+    return `${moduleKey}-${recordIndex}`;
+  }
+
+  function scrollPendingRecordIntoView() {
+    if (!pendingFocusRecordKey) {
+      return;
+    }
+    const recordElement = moduleEditor.querySelector(`[data-record-key="${pendingFocusRecordKey}"]`);
+    pendingFocusRecordKey = "";
+    if (!recordElement) {
+      return;
+    }
+    recordElement.classList.add("is-focused");
+    recordElement.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => {
+      recordElement.classList.remove("is-focused");
+    }, 1400);
   }
 
   function renderModuleEditor(state, validation) {
@@ -534,7 +970,7 @@ export function mountApp({ store }) {
     const addButton = document.createElement("button");
     addButton.type = "button";
     addButton.className = "secondary-button";
-    addButton.textContent = "Eintrag hinzufügen";
+    addButton.textContent = "Neuer Eintrag";
     addButton.addEventListener("click", () => {
       store.addRecord(activeModuleKey, activeDocumentId);
     });
@@ -668,13 +1104,34 @@ export function mountApp({ store }) {
 
     visibleRecords.forEach(({ record, actualIndex }, recordIndex) => {
       const fragment = cardTemplate.content.cloneNode(true);
+      const card = fragment.querySelector(".record-card");
       const title = fragment.querySelector("h3");
       const kicker = fragment.querySelector(".record-kicker");
       const fields = fragment.querySelector(".record-fields");
+      const recordActions = fragment.querySelector(".record-actions");
       const recordErrors = validation.moduleErrors[activeModuleKey]?.[actualIndex] || [];
+      const recordKey = getRecordDomKey(activeModuleKey, actualIndex);
+      const isRecordCollapsed = collapsedRecordKeys.has(recordKey);
 
+      card.dataset.recordKey = recordKey;
+      card.classList.toggle("is-collapsed", isRecordCollapsed);
       kicker.textContent = `Eintrag ${recordIndex + 1}${recordErrors.length ? ` • ${recordErrors.length} Fehler` : ""}`;
       title.textContent = record.name || "Unbenannter Eintrag";
+
+      const collapseRecordButton = document.createElement("button");
+      collapseRecordButton.className = "ghost-button record-collapse-button";
+      collapseRecordButton.type = "button";
+      collapseRecordButton.textContent = isRecordCollapsed ? "Öffnen" : "Einklappen";
+      collapseRecordButton.setAttribute("aria-expanded", isRecordCollapsed ? "false" : "true");
+      collapseRecordButton.addEventListener("click", () => {
+        if (collapsedRecordKeys.has(recordKey)) {
+          collapsedRecordKeys.delete(recordKey);
+        } else {
+          collapsedRecordKeys.add(recordKey);
+        }
+        render(store.getState());
+      });
+      recordActions.prepend(collapseRecordButton);
 
       fragment.querySelector(".delete-record-button").addEventListener("click", () => {
         store.removeRecord(activeModuleKey, actualIndex);
@@ -687,6 +1144,7 @@ export function mountApp({ store }) {
       moduleDefinition.fields.forEach((fieldDefinition) => {
         fields.append(createField(fieldDefinition, record, recordErrors, actualIndex, title));
       });
+      fields.hidden = isRecordCollapsed;
 
       stack.append(fragment);
     });
@@ -695,26 +1153,6 @@ export function mountApp({ store }) {
   }
 
   function createField(fieldDefinition, record, recordErrors, recordIndex, title) {
-    const wrapper = document.createElement("div");
-    wrapper.className = `field${
-      [
-        "textarea",
-        "tags",
-        "reference-tags",
-        "json",
-        "json-list",
-        "validator-rule",
-        "numeric-distribution-params",
-        "selection-default-options",
-      ].includes(fieldDefinition.type)
-        ? " field-full"
-        : ""
-    }`;
-
-    const label = document.createElement("label");
-    label.textContent = fieldDefinition.label;
-    wrapper.append(label);
-
     let input;
 
     if (fieldDefinition.type === "textarea") {
@@ -774,12 +1212,13 @@ export function mountApp({ store }) {
         store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.value, { emit: false });
         refreshDerivedViews();
       });
+    } else if (fieldDefinition.type === "tags") {
+      input = createTagsInput(fieldDefinition, record, recordIndex);
     } else {
       input = document.createElement("input");
       input.type = fieldDefinition.type === "number" ? "number" : "text";
       input.placeholder = fieldDefinition.placeholder || "";
-      input.value =
-        fieldDefinition.type === "tags" ? (record[fieldDefinition.key] || []).join(", ") : (record[fieldDefinition.key] ?? "");
+      input.value = record[fieldDefinition.key] ?? "";
       input.addEventListener("input", (event) => {
         store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, event.target.value, { emit: false });
         if (fieldDefinition.key === "name") {
@@ -787,13 +1226,8 @@ export function mountApp({ store }) {
         }
         refreshDerivedViews();
       });
-      if (fieldDefinition.key === "selection_options") {
-        input.addEventListener("change", () => render(store.getState()));
-      }
     }
 
-    const hint = document.createElement("p");
-    hint.className = "field-hint";
     let defaultHint = "Optional, sofern der nachgelagerte Validator das Feld nicht verlangt.";
     if (fieldDefinition.type === "tags") {
       defaultHint = "Werte durch Kommas trennen.";
@@ -814,10 +1248,131 @@ export function mountApp({ store }) {
     } else if (fieldDefinition.type === "boolean") {
       defaultHint = "Häkchen setzen, wenn ja.";
     }
-    hint.textContent = recordErrors.find((error) => error.startsWith(fieldDefinition.label)) || defaultHint;
+    const errorText = recordErrors.find((error) => error.startsWith(fieldDefinition.label)) || "";
+    const isFullWidth = [
+      "textarea",
+      "tags",
+      "reference-tags",
+      "json",
+      "json-list",
+      "validator-rule",
+      "numeric-distribution-params",
+      "selection-default-options",
+    ].includes(fieldDefinition.type);
 
-    wrapper.append(input, hint);
-    return wrapper;
+    return createFieldShell({
+      fieldKey: `record:${activeModuleKey}:${record._documentId || "document"}:${recordIndex}:${fieldDefinition.key}`,
+      labelText: fieldDefinition.label,
+      input,
+      hintText: defaultHint,
+      errorText,
+      full: isFullWidth,
+      defaultExpanded: fieldDefinition.required || IMPORTANT_FIELD_KEYS.has(fieldDefinition.key) || Boolean(errorText),
+    });
+  }
+
+  function createTagsInput(fieldDefinition, record, recordIndex) {
+    const container = document.createElement("div");
+    container.className = "tag-box";
+    const values = Array.isArray(record[fieldDefinition.key]) ? record[fieldDefinition.key] : [];
+    const sourceRecords = fieldDefinition.sourceModule ? getSourceRecords(fieldDefinition.sourceModule) : [];
+    const optionValues = sourceRecords
+      .map((sourceRecord) => sourceRecord.name)
+      .filter((value) => value && !values.includes(value));
+    const datalistId = `tag-options-${activeModuleKey}-${recordIndex}-${fieldDefinition.key}`;
+
+    const chipList = document.createElement("div");
+    chipList.className = "tag-chip-list";
+    if (!values.length) {
+      const empty = document.createElement("p");
+      empty.className = "reference-empty";
+      empty.textContent = "Noch keine Werte eingetragen.";
+      chipList.append(empty);
+    }
+
+    values.forEach((value) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "tag-chip";
+      chip.textContent = `${displayNameFor(fieldDefinition.sourceModule, value) || value} x`;
+      chip.title = `${value} entfernen`;
+      chip.addEventListener("click", () => {
+        store.updateRecordField(
+          activeModuleKey,
+          recordIndex,
+          fieldDefinition.key,
+          values.filter((candidate) => candidate !== value),
+        );
+      });
+      chipList.append(chip);
+    });
+
+    const inputRow = document.createElement("div");
+    inputRow.className = "tag-input-row";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = fieldDefinition.placeholder || "Wert eingeben";
+    if (optionValues.length) {
+      input.setAttribute("list", datalistId);
+    }
+
+    const addValues = (rawValue) => {
+      const nextValues = mergeUniqueValues([...values, ...splitTagInput(rawValue)]);
+      if (nextValues.length !== values.length) {
+        store.updateRecordField(activeModuleKey, recordIndex, fieldDefinition.key, nextValues);
+      }
+      input.value = "";
+    };
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === ",") {
+        event.preventDefault();
+        addValues(input.value);
+      }
+    });
+    input.addEventListener("paste", (event) => {
+      const text = event.clipboardData?.getData("text") || "";
+      if (text.includes(",") || text.includes("\n")) {
+        event.preventDefault();
+        addValues(text);
+      }
+    });
+    input.addEventListener("blur", () => {
+      if (input.value.trim()) {
+        addValues(input.value);
+      }
+    });
+
+    const addButton = document.createElement("button");
+    addButton.type = "button";
+    addButton.className = "ghost-button tag-add-button";
+    addButton.textContent = "Hinzufügen";
+    addButton.addEventListener("click", () => addValues(input.value));
+
+    inputRow.append(input, addButton);
+
+    if (optionValues.length) {
+      const datalist = document.createElement("datalist");
+      datalist.id = datalistId;
+      optionValues.forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.label = displayNameFor(fieldDefinition.sourceModule, value) || value;
+        datalist.append(option);
+      });
+      inputRow.append(datalist);
+    }
+
+    container.append(chipList, inputRow);
+    return container;
+  }
+
+  function splitTagInput(value) {
+    return String(value || "")
+      .split(/,|\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
   }
 
   function getSourceRecords(moduleKey) {
@@ -1379,8 +1934,8 @@ export function mountApp({ store }) {
       chip.className = `reference-chip${fieldDefinition.computed ? " readonly" : ""}`;
       chip.textContent =
         sourceRecord?.name_de && sourceRecord.name_de !== value
-          ? `${sourceRecord.name_de}${fieldDefinition.computed ? ` (${value})` : " ×"}`
-          : `${value}${fieldDefinition.computed ? "" : " ×"}`;
+          ? `${sourceRecord.name_de}${fieldDefinition.computed ? ` (${value})` : " x"}`
+          : `${value}${fieldDefinition.computed ? "" : " x"}`;
       if (!fieldDefinition.computed) {
         chip.title = `${value} entfernen`;
         chip.addEventListener("click", () => {
@@ -1404,74 +1959,254 @@ export function mountApp({ store }) {
 
   function renderPreview(state, previewGroups = buildPreviewGroups(state)) {
     const fileEntries = buildSerializedFiles(state);
-    const activeGroup = previewGroups.find((group) => group.key === activePreviewGroupKey) || previewGroups[0];
-    const filePaths = activeGroup ? activeGroup.files.map((file) => file.path) : [];
-
+    const filePaths = Object.keys(fileEntries);
     if (!filePaths.includes(activeFilePath)) {
-      activeFilePath = filePaths[0];
+      activeFilePath = "config.yaml";
     }
 
     fileTabs.innerHTML = "";
-    const contextTabs = document.createElement("div");
-    contextTabs.className = "tab-strip preview-context-tabs";
 
-    previewGroups.forEach((group) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `tab-button${group.key === activePreviewGroupKey ? " active" : ""}`;
-      button.textContent = group.label;
-      button.addEventListener("click", () => {
-        activePreviewGroupKey = group.key;
-        activeFilePath = group.files[0]?.path || "config.yaml";
-        renderPreview(store.getState());
-      });
-      contextTabs.append(button);
-    });
-
-    fileTabs.append(contextTabs);
-
-    if (activeGroup) {
-      const groupElement = document.createElement("section");
-      groupElement.className = "preview-group";
-
-      const groupHeader = document.createElement("div");
-      groupHeader.className = "preview-group-header";
-
-      const titleBlock = document.createElement("div");
-      const title = document.createElement("p");
-      title.className = "preview-group-title";
-      title.textContent = activeGroup.label;
-
-      const description = document.createElement("p");
-      description.className = "preview-group-description";
-      description.textContent = activeGroup.description;
-
-      titleBlock.append(title, description);
-      groupHeader.append(titleBlock);
-
-      const groupTabs = document.createElement("div");
-      groupTabs.className = "tab-strip preview-group-tabs";
-
-      activeGroup.files.forEach((file) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = `tab-button${file.path === activeFilePath ? " active" : ""}${file.emphasis === "low" ? " subtle-tab" : ""}`;
-        button.textContent = file.label;
-        button.addEventListener("click", () => {
-          activeFilePath = file.path;
-          if (file.documentId && activeGroup.key !== "root") {
-            activeDocumentIds[activeGroup.key] = file.documentId;
-          }
-          renderPreview(store.getState());
-        });
-        groupTabs.append(button);
-      });
-
-      groupElement.append(groupHeader, groupTabs);
-      fileTabs.append(groupElement);
-    }
+    fileTabs.append(
+      createTreeGroup("files", "Dateien", "config.yaml, Modulkonfigurationen und data/*.yaml", buildFileTreeNodes(state), true),
+      createTreeGroup(
+        "hierarchy",
+        "Konzept-Hierarchie",
+        "Examination -> Finding / Intervention -> Classification -> ClassificationChoice -> ClassificationDescriptor -> Unit",
+        buildConceptHierarchyNodes(state),
+        true,
+      ),
+    );
 
     filePreview.textContent = activeFilePath ? fileEntries[activeFilePath] : "Keine Datei ausgewählt.";
+  }
+
+  function buildFileTreeNodes(state) {
+    const nodes = [
+      createTreeButton("config.yaml", "Basis", () => selectPreviewFile("config.yaml", "root"), {
+        active: activeFilePath === "config.yaml",
+      }),
+    ];
+
+    getPreviewModuleKeys(state).forEach((moduleKey) => {
+      const moduleDefinition = MODULE_MAP[moduleKey];
+      const documents = state.documents?.[moduleKey]?.length
+        ? state.documents[moduleKey]
+        : [{ id: `${moduleKey}-fallback`, name: "custom.yaml" }];
+      const moduleChildren = [
+        createTreeButton("config.yaml", "Modul", () => selectPreviewFile(`${moduleKey}/config.yaml`, moduleKey), {
+          active: activeFilePath === `${moduleKey}/config.yaml`,
+        }),
+      ];
+
+      documents.forEach((document) => {
+        const documentPath = `${moduleKey}/data/${document.name}`;
+        const recordNodes = (state.records?.[moduleKey] || [])
+          .map((record, recordIndex) => ({ record, recordIndex }))
+          .filter(({ record }) => record._documentId === document.id)
+          .map(({ record, recordIndex }) =>
+            createTreeButton(recordDisplayName(record) || record.name || "Unbenannter Eintrag", "Konzept", () => focusRecord(moduleKey, recordIndex), {
+              compact: true,
+            }),
+          );
+
+        moduleChildren.push(
+          createTreeGroup(
+            `${moduleKey}:${document.id}`,
+            document.name,
+            "data/*.yaml",
+            [
+              createTreeButton(document.name, documentPath, () => selectPreviewFile(documentPath, moduleKey, document.id), {
+                active: activeFilePath === documentPath,
+              }),
+              ...recordNodes,
+            ],
+            activeFilePath === documentPath,
+          ),
+        );
+      });
+
+      nodes.push(
+        createTreeGroup(
+          moduleKey,
+          moduleDefinition.label,
+          CONCEPT_MODULE_TIER[moduleKey] || moduleDefinition.key,
+          moduleChildren,
+          activePreviewGroupKey === moduleKey,
+        ),
+      );
+    });
+
+    return nodes;
+  }
+
+  function getPreviewModuleKeys(state) {
+    const selected = new Set(state.bundle.modules);
+    return [
+      ...CONCEPT_MODULE_ORDER.filter((moduleKey) => selected.has(moduleKey)),
+      ...state.bundle.modules.filter((moduleKey) => !CONCEPT_MODULE_ORDER.includes(moduleKey)),
+    ];
+  }
+
+  function createTreeGroup(nodeKey, label, meta, children, defaultOpen = false) {
+    const details = document.createElement("details");
+    details.className = "tree-group";
+    details.open = expandedTreeNodes.has(nodeKey) || defaultOpen;
+    details.addEventListener("toggle", () => {
+      if (details.open) {
+        expandedTreeNodes.add(nodeKey);
+      } else {
+        expandedTreeNodes.delete(nodeKey);
+      }
+    });
+
+    const summary = document.createElement("summary");
+    summary.className = "tree-summary";
+    summary.innerHTML = "<span></span><small></small>";
+    summary.querySelector("span").textContent = label;
+    summary.querySelector("small").textContent = meta;
+    details.append(summary, ...children);
+    return details;
+  }
+
+  function createTreeButton(label, meta, onClick, options = {}) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `tree-button${options.active ? " active" : ""}${options.compact ? " compact" : ""}${options.missing ? " missing" : ""}`;
+    button.disabled = options.disabled === true;
+    button.innerHTML = "<span></span><small></small>";
+    button.querySelector("span").textContent = label;
+    button.querySelector("small").textContent = meta;
+    if (onClick) {
+      button.addEventListener("click", onClick);
+    }
+    return button;
+  }
+
+  function selectPreviewFile(path, moduleKey = "root", documentId = null) {
+    activeFilePath = path;
+    activePreviewGroupKey = moduleKey || "root";
+    if (moduleKey && moduleKey !== "root") {
+      expandedTreeNodes.add(moduleKey);
+      if (!MODULE_MAP[moduleKey]?.hidden) {
+        activeModuleKey = moduleKey;
+      }
+      if (documentId) {
+        activeDocumentIds[moduleKey] = documentId;
+      }
+    }
+    render(store.getState());
+  }
+
+  function buildConceptHierarchyNodes(state) {
+    const examinationNodes = (state.records.lx_examinations || []).map((record, recordIndex) =>
+      createConceptBranch(state, "lx_examinations", record, recordIndex, buildExaminationConceptChildren(state, record)),
+    );
+
+    if (examinationNodes.length) {
+      return examinationNodes;
+    }
+
+    const fallbackNodes = [
+      ...(state.records.lx_findings || []).map((record, recordIndex) =>
+        createConceptBranch(state, "lx_findings", record, recordIndex, buildFindingConceptChildren(state, record)),
+      ),
+      ...(state.records.lx_interventions || []).map((record, recordIndex) =>
+        createConceptBranch(state, "lx_interventions", record, recordIndex, buildInterventionConceptChildren(state, record)),
+      ),
+    ];
+
+    return fallbackNodes.length
+      ? fallbackNodes
+      : [createTreeButton("Keine Konzepte", "Noch keine Untersuchungen oder Befunde vorhanden.", null, { disabled: true, missing: true })];
+  }
+
+  function createConceptBranch(state, moduleKey, record, recordIndex, children = []) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "concept-branch";
+    wrapper.append(
+      createTreeButton(recordDisplayName(record) || record.name || "Unbenannter Eintrag", CONCEPT_MODULE_TIER[moduleKey] || MODULE_MAP[moduleKey]?.label || moduleKey, () =>
+        focusRecord(moduleKey, recordIndex),
+      ),
+    );
+    if (children.length) {
+      const childList = document.createElement("div");
+      childList.className = "tree-children";
+      childList.append(...children);
+      wrapper.append(childList);
+    }
+    return wrapper;
+  }
+
+  function createConceptReference(state, moduleKey, name, childrenBuilder) {
+    const ref = findRecordReference(state, moduleKey, name);
+    if (!ref) {
+      return createTreeButton(name, `${CONCEPT_MODULE_TIER[moduleKey] || MODULE_MAP[moduleKey]?.label || moduleKey} fehlt`, null, {
+        disabled: true,
+        missing: true,
+        compact: true,
+      });
+    }
+    return createConceptBranch(state, moduleKey, ref.record, ref.recordIndex, childrenBuilder ? childrenBuilder(ref.record) : []);
+  }
+
+  function findRecordReference(state, moduleKey, name) {
+    const recordIndex = (state.records?.[moduleKey] || []).findIndex((record) => record.name === name);
+    if (recordIndex === -1) {
+      return null;
+    }
+    return { record: state.records[moduleKey][recordIndex], recordIndex };
+  }
+
+  function buildExaminationConceptChildren(state, examination) {
+    return [
+      ...listRecordValues(examination, "findings").map((name) =>
+        createConceptReference(state, "lx_findings", name, (record) => buildFindingConceptChildren(state, record)),
+      ),
+      ...listRecordValues(examination, "interventions").map((name) =>
+        createConceptReference(state, "lx_interventions", name, (record) => buildInterventionConceptChildren(state, record)),
+      ),
+    ];
+  }
+
+  function buildFindingConceptChildren(state, finding) {
+    return [
+      ...listRecordValues(finding, "interventions").map((name) =>
+        createConceptReference(state, "lx_interventions", name, (record) => buildInterventionConceptChildren(state, record)),
+      ),
+      ...listRecordValues(finding, "classifications").map((name) =>
+        createConceptReference(state, "lx_classifications", name, (record) => buildClassificationConceptChildren(state, record)),
+      ),
+    ];
+  }
+
+  function buildInterventionConceptChildren(state, intervention) {
+    return listRecordValues(intervention, "classifications").map((name) =>
+      createConceptReference(state, "lx_classifications", name, (record) => buildClassificationConceptChildren(state, record)),
+    );
+  }
+
+  function buildClassificationConceptChildren(state, classification) {
+    return listRecordValues(classification, "classification_choices").map((name) =>
+      createConceptReference(state, "lx_classification_choices", name, (record) => buildChoiceConceptChildren(state, record)),
+    );
+  }
+
+  function buildChoiceConceptChildren(state, choice) {
+    return listRecordValues(choice, "classification_choice_descriptors").map((name) =>
+      createConceptReference(state, "lx_descriptors", name, (record) => buildDescriptorConceptChildren(state, record)),
+    );
+  }
+
+  function buildDescriptorConceptChildren(state, descriptor) {
+    return listRecordValues(descriptor, "unit").map((name) => createConceptReference(state, "lx_units", name));
+  }
+
+  function listRecordValues(record, key) {
+    const value = record?.[key];
+    if (Array.isArray(value)) {
+      return value.filter(Boolean);
+    }
+    return value ? [value] : [];
   }
 
   function renderLintPanel() {

@@ -21,9 +21,10 @@
         </div>
         <div class="hero-actions">
           <button id="reset-button" class="ghost-button" type="button">Beispiel zurücksetzen</button>
+          <button id="empty-reset-button" class="ghost-button" type="button">Beispiel auf null setzen</button>
           <button id="share-button" class="primary-button" type="button">Freigabelink kopieren</button>
           <button id="download-button" class="secondary-button" type="button">YAML-Dateien herunterladen</button>
-          <button id="zip-download-button" class="secondary-button" type="button">ZIP herunterladen</button>
+          <button data-action="zip-download" class="secondary-button" type="button">ZIP herunterladen</button>
           <button id="zip-open-button" class="ghost-button" type="button">ZIP öffnen</button>
           <button id="zip-merge-button" class="primary-button" type="button">ZIP zusammenführen</button>
           <button data-action="lint" class="secondary-button" type="button">Paket prüfen</button>
@@ -44,17 +45,64 @@
 
           <div class="form-grid" id="bundle-form"></div>
 
-          <div class="module-pickers" id="module-pickers"></div>
-
-          <div class="panel-header panel-header-inline">
-            <div>
-              <p class="section-kicker">Editor</p>
-              <h2>Terminologie-Module</h2>
+          <section class="collapsible-editor-section is-collapsed" data-collapsible-section="module-pickers">
+            <div class="editor-section-note collapsible-section-header">
+              <div>
+                <p class="section-kicker">Modulauswahl</p>
+                <h3>Module aktivieren</h3>
+              </div>
+              <div class="collapsible-section-actions">
+                <p class="muted">Hier wird festgelegt, welche Terminologie-Module im Paket enthalten sind.</p>
+                <button
+                  class="section-toggle-button"
+                  type="button"
+                  data-section-toggle="module-pickers"
+                  aria-expanded="false"
+                  aria-label="Modulauswahl einklappen oder ausklappen"
+                >+</button>
+              </div>
             </div>
-            <div class="tab-strip" id="module-tabs"></div>
-          </div>
+            <div class="collapsible-section-body" data-section-body="module-pickers" hidden>
+              <div class="module-pickers" id="module-pickers"></div>
+            </div>
+          </section>
 
-          <div id="module-editor"></div>
+          <section class="collapsible-editor-section" data-collapsible-section="records">
+            <div class="panel-header panel-header-inline collapsible-section-header">
+              <div>
+                <p class="section-kicker">Datensätze</p>
+                <h2>Terminologie-Module</h2>
+              </div>
+              <div class="collapsible-section-actions">
+                <div class="tab-strip" id="module-tabs"></div>
+                <button
+                  class="section-toggle-button"
+                  type="button"
+                  data-section-toggle="records"
+                  aria-expanded="true"
+                  aria-label="Datensätze einklappen oder ausklappen"
+                >-</button>
+              </div>
+            </div>
+
+            <div class="collapsible-section-body" data-section-body="records">
+              <section class="concept-search-panel" aria-label="Konzeptsuche">
+                <p class="section-kicker">Navigation</p>
+                <label for="concept-search-input">Konzeptsuche</label>
+                <input
+                  id="concept-search-input"
+                  type="search"
+                  placeholder="Name, Datei, Modul oder Referenz suchen"
+                  autocomplete="off"
+                />
+                <div class="concept-search-results" id="concept-search-results" role="list"></div>
+              </section>
+
+              <section class="finding-suggestions" id="finding-suggestions" aria-label="Vorschläge für neue Befunde"></section>
+
+              <div id="module-editor"></div>
+            </div>
+          </section>
         </section>
 
         <section class="panel panel-preview">
@@ -63,11 +111,13 @@
               <p class="section-kicker">Vorschau</p>
               <h2>Generierte Dateien</h2>
             </div>
-            <p class="muted">Konfiguration und YAML-Inhalte aktualisieren sich beim Bearbeiten.</p>
+            <div class="preview-actions">
+              <button data-action="zip-download" class="secondary-button" type="button">ZIP herunterladen</button>
+            </div>
           </div>
 
           <div class="preview-toolbar">
-            <div class="tab-strip" id="file-tabs"></div>
+            <div class="file-tree" id="file-tabs"></div>
           </div>
 
           <pre class="preview-code"><code id="file-preview"></code></pre>
@@ -77,9 +127,11 @@
               <div>
                 <p class="section-kicker">Prüfung</p>
                 <h2>Paketprüfung</h2>
-                <button data-action="lint" class="secondary-button" type="button">Paket prüfen</button>
               </div>
               <p class="muted lint-status" id="lint-status">Noch nicht geprüft.</p>
+            </div>
+            <div class="lint-actions">
+              <button data-action="lint" class="secondary-button" type="button">Paket prüfen</button>
             </div>
             <pre class="preview-code lint-code"><code id="lint-output">Noch keine Prüfausgabe.</code></pre>
           </div>

@@ -1,5 +1,5 @@
 import { collectDependencies, collectDependents, getModuleDefinition, getModuleKeys } from "./models/module-definitions.js";
-import { createDefaultDocument, createDefaultState, createEmptyRecord } from "./models/state-factory.js";
+import { createDefaultDocument, createDefaultState, createEmptyRecord, createEmptyState } from "./models/state-factory.js";
 import {
   normalizeDocumentName,
   normalizeState,
@@ -73,6 +73,11 @@ export function createStore(initialState = createDefaultState()) {
 
     reset() {
       state = createDefaultState();
+      emit();
+    },
+
+    resetEmpty() {
+      state = createEmptyState();
       emit();
     },
 
@@ -150,6 +155,18 @@ export function createStore(initialState = createDefaultState()) {
     addRecord(moduleKey, documentId) {
       mutate((draft) => {
         const record = createEmptyRecord(getModuleDefinition(moduleKey));
+        record._documentId = documentId || draft.documents?.[moduleKey]?.[0]?.id || null;
+        draft.records[moduleKey].push(record);
+      });
+    },
+
+    addRecordWithValues(moduleKey, documentId, initialValues = {}) {
+      mutate((draft) => {
+        const moduleDefinition = getModuleDefinition(moduleKey);
+        const record = {
+          ...createEmptyRecord(moduleDefinition),
+          ...cloneState(initialValues),
+        };
         record._documentId = documentId || draft.documents?.[moduleKey]?.[0]?.id || null;
         draft.records[moduleKey].push(record);
       });

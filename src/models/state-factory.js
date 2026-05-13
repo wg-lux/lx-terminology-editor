@@ -30,16 +30,9 @@ export function createEmptyRecord(moduleDefinition) {
   }, {});
 }
 
-export function createDefaultState() {
+function createStateShell(bundle) {
   const state = {
-    bundle: {
-      name: "beispiel_terminologie",
-      description: "Gemeinsames Terminologiepaket für LX-kompatible YAML-Exporte.",
-      version: "0.1.0",
-      medical_field: "gastroenterology",
-      author: "",
-      modules: normalizeSelectedModules(MODULE_DEFINITIONS.map((moduleDefinition) => moduleDefinition.key)),
-    },
+    bundle,
     documents: {},
     records: {},
   };
@@ -47,6 +40,30 @@ export function createDefaultState() {
   MODULE_DEFINITIONS.forEach((moduleDefinition) => {
     state.documents[moduleDefinition.key] = [createDefaultDocument(moduleDefinition.key)];
     state.records[moduleDefinition.key] = [];
+  });
+
+  return state;
+}
+
+export function createEmptyState() {
+  return createStateShell({
+    name: "terminologiepaket",
+    description: "",
+    version: "0.1.0",
+    medical_field: "gastroenterology",
+    author: "",
+    modules: normalizeSelectedModules(MODULE_DEFINITIONS.map((moduleDefinition) => moduleDefinition.key)),
+  });
+}
+
+export function createDefaultState() {
+  const state = createStateShell({
+    name: "beispiel_terminologie",
+    description: "Gemeinsames Terminologiepaket für LX-kompatible YAML-Exporte.",
+    version: "0.1.0",
+    medical_field: "gastroenterology",
+    author: "",
+    modules: normalizeSelectedModules(MODULE_DEFINITIONS.map((moduleDefinition) => moduleDefinition.key)),
   });
 
   state.records.lx_examinations = [
