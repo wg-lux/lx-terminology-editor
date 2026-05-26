@@ -92,15 +92,17 @@ const VALIDATOR_COMPARATOR_LABELS = {
   in: "einer von",
   not_in: "keiner von",
 };
-const REQUIREMENT_KIND_OPTIONS = ["classification", "finding", "intervention", "unit"];
+const REQUIREMENT_KIND_OPTIONS = ["classification", "classification_choice", "finding", "intervention", "unit"];
 const REQUIREMENT_KIND_LABELS = {
   classification: "Klassifikation",
+  classification_choice: "Klassifikation-Auswahlwert",
   finding: "Befund",
   intervention: "Intervention",
   unit: "Einheit",
 };
 const REQUIREMENT_SOURCE_MODULES = {
   classification: "lx_classifications",
+  classification_choice: "lx_classification_choices",
   finding: "lx_findings",
   intervention: "lx_interventions",
   unit: "lx_units",
@@ -1509,8 +1511,12 @@ export function mountApp({ store }) {
       );
     };
 
-    [conditionClassification.input, comparator.input, requirementKind.input, requirementName.input].forEach((input) => {
+    [conditionClassification.input, comparator.input, requirementName.input].forEach((input) => {
       input.addEventListener("change", writeQuery);
+    });
+    requirementKind.input.addEventListener("change", () => {
+      requirementName.input.value = "";
+      writeQuery();
     });
     if (requirementClassification) {
       requirementClassification.input.addEventListener("change", writeQuery);

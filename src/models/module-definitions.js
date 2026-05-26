@@ -235,7 +235,7 @@ export const MODULE_DEFINITIONS = [
   },
   {
     key: "lx_classification_choices",
-    label: "Auswahlwerte",
+    label: "Klassifikation-Auswahlwerte",
     model: "classification_choice",
     description: "Atomare Werte, aus denen Klassifikationen aufgebaut werden.",
     dependsOn: ["lx_descriptors"],
